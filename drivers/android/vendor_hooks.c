@@ -44,6 +44,9 @@
 #include <trace/hooks/hung_task.h>
 #include <trace/hooks/rwsem.h>
 #include <trace/hooks/futex.h>
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+#include <trace/hooks/topology.h>
+#endif
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -57,6 +60,9 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rwsem_read_wait_start);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rwsem_read_wait_finish);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rwsem_write_wait_start);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rwsem_write_wait_finish);
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_arch_set_freq_scale);
+#endif
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_binder_transaction_init);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_binder_set_priority);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_binder_restore_priority);

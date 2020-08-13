@@ -25,6 +25,9 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+#include <trace/hooks/topology.h>
+#endif
 
 static DEFINE_PER_CPU(struct scale_freq_data __rcu *, sft_data);
 static struct cpumask scale_freq_counters_mask;
@@ -148,7 +151,9 @@ void topology_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
 		return;
 
 	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
-
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+	trace_android_vh_arch_set_freq_scale(cpus, cur_freq, max_freq, &scale);
+#endif
 	for_each_cpu(i, cpus)
 		per_cpu(arch_freq_scale, i) = scale;
 }
