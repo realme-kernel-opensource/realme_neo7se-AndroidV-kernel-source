@@ -91,6 +91,10 @@ struct napi_gro_cb {
 #define NAPI_GRO_CB(skb) ((struct napi_gro_cb *)(skb)->cb)
 
 #define GRO_RECURSION_LIMIT 15
+#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
+	void skb_udp_gro_debug(struct sk_buff *skb, struct sk_buff *old_fraglist);
+#endif
+
 static inline int gro_recursion_inc_test(struct sk_buff *skb)
 {
 	return ++NAPI_GRO_CB(skb)->recursion_counter == GRO_RECURSION_LIMIT;
@@ -448,6 +452,9 @@ static inline void gro_normal_one(struct napi_struct *napi, struct sk_buff *skb,
 {
 	list_add_tail(&skb->list, &napi->rx_list);
 	napi->rx_count += segs;
+	#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
+		skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
+	#endif
 	if (napi->rx_count >= READ_ONCE(gro_normal_batch))
 		gro_normal_list(napi);
 }

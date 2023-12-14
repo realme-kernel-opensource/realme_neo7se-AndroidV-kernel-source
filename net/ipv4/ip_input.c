@@ -142,6 +142,9 @@
 #include <linux/netlink.h>
 #include <net/dst_metadata.h>
 
+#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
+	void skb_udp_gro_debug(struct sk_buff *skb, struct sk_buff *old_fraglist);
+#endif
 /*
  *	Process Router Attention IP option (RFC 2113)
  */
@@ -250,6 +253,9 @@ int ip_local_deliver(struct sk_buff *skb)
 		if (ip_defrag(net, skb, IP_DEFRAG_LOCAL_DELIVER))
 			return 0;
 	}
+#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
+	skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
+#endif
 
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_IN,
 		       net, NULL, skb, skb->dev, NULL,
@@ -565,6 +571,9 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
 	skb = ip_rcv_core(skb, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
+#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
+	skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
+#endif
 
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
