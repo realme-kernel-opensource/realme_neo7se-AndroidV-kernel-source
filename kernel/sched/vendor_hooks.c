@@ -86,3 +86,6 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_post_init_entity_util_avg);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_effective_cpu_util);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_dup_task_struct);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_set_task_comm);
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_find_new_ilb);
+#endif

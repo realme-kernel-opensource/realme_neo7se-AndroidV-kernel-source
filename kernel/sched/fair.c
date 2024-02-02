@@ -11779,8 +11779,18 @@ static inline int on_null_domain(struct rq *rq)
 
 static inline int find_new_ilb(void)
 {
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+	int ilb = -1;
+#else
 	int ilb;
+#endif
 	const struct cpumask *hk_mask;
+
+#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
+	trace_android_rvh_find_new_ilb(nohz.idle_cpus_mask, &ilb);
+	if (ilb >= 0)
+		return ilb;
+#endif
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_MISC);
 
