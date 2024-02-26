@@ -1679,6 +1679,11 @@ static void z_erofs_submit_queue(struct z_erofs_decompress_frontend *f,
 			if (bio && (cur != last_pa ||
 				    last_bdev != mdev.m_bdev)) {
 submit_bio_retry:
+#ifdef CONFIG_MTK_F2FS_DEBUG
+				if (!bio->bi_iter.bi_size)
+					WARN(1, "erofs submit empty io, bio=0x%p, bi_opf=0x%x, bi_sector=%llu\n",
+					     bio, bio->bi_opf, bio->bi_iter.bi_sector);
+#endif
 				submit_bio(bio);
 				if (memstall) {
 					psi_memstall_leave(&pflags);
@@ -1722,6 +1727,11 @@ submit_bio_retry:
 	} while (owned_head != Z_EROFS_PCLUSTER_TAIL);
 
 	if (bio) {
+#ifdef CONFIG_MTK_F2FS_DEBUG
+		if (!bio->bi_iter.bi_size)
+			WARN(1, "erofs submit empty io, bio=0x%p, bi_opf=0x%x, bi_sector=%llu\n",
+			     bio, bio->bi_opf, bio->bi_iter.bi_sector);
+#endif
 		submit_bio(bio);
 		if (memstall)
 			psi_memstall_leave(&pflags);
