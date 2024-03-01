@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM topology
 
@@ -28,4 +27,3 @@ DECLARE_HOOK(android_vh_arch_set_freq_scale,
 #endif /* _TRACE_HOOK_TOPOLOGY_H */
 /* This part must be outside protection */
 #include <trace/define_trace.h>
-#endif
