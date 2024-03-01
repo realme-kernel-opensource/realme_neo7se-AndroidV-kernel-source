@@ -7872,13 +7872,11 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 	struct sched_domain *sd;
 	struct perf_domain *pd;
 	struct energy_env eenv;
-#if IS_ENABLED(CONFIG_MTK_ORIGIN_CHANGE)
 	int new_cpu = INT_MAX;
 
 	trace_android_rvh_find_energy_efficient_cpu(p, prev_cpu, sync, &new_cpu);
 	if (new_cpu != INT_MAX)
 		return new_cpu;
-#endif
 
 	sync_entity_load_avg(&p->se);
 
