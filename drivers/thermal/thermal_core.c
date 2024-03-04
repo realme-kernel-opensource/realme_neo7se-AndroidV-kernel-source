@@ -37,6 +37,8 @@ static LIST_HEAD(thermal_governor_list);
 static DEFINE_MUTEX(thermal_list_lock);
 static DEFINE_MUTEX(thermal_governor_lock);
 
+static atomic_t in_suspend;
+
 static struct thermal_governor *def_governor;
 
 /*
@@ -407,7 +409,7 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 {
 	int count;
 
-	if (tz->suspended)
+	if (atomic_read(&in_suspend))
 		return;
 
 	if (WARN_ONCE(!tz->ops->get_temp,
@@ -1530,35 +1532,17 @@ static int thermal_pm_notify(struct notifier_block *nb,
 	case PM_HIBERNATION_PREPARE:
 	case PM_RESTORE_PREPARE:
 	case PM_SUSPEND_PREPARE:
-		mutex_lock(&thermal_list_lock);
-
-		list_for_each_entry(tz, &thermal_tz_list, node) {
-			mutex_lock(&tz->lock);
-
-			tz->suspended = true;
-
-			mutex_unlock(&tz->lock);
-		}
-
-		mutex_unlock(&thermal_list_lock);
+		atomic_set(&in_suspend, 1);
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
 	case PM_POST_SUSPEND:
-		mutex_lock(&thermal_list_lock);
-
+		atomic_set(&in_suspend, 0);
 		list_for_each_entry(tz, &thermal_tz_list, node) {
-			mutex_lock(&tz->lock);
-
-			tz->suspended = false;
-
 			thermal_zone_device_init(tz);
-			__thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
-
-			mutex_unlock(&tz->lock);
+			thermal_zone_device_update(tz,
+						   THERMAL_EVENT_UNSPECIFIED);
 		}
-
-		mutex_unlock(&thermal_list_lock);
 		break;
 	default:
 		break;
