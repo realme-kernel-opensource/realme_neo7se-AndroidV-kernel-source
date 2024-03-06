@@ -1676,6 +1676,10 @@ static void z_erofs_submit_queue(struct z_erofs_decompress_frontend *f,
 			z_erofs_fill_bio_vec(&bvec, f, pcl, i++, mc);
 			if (!bvec.bv_page)
 				continue;
+#ifdef CONFIG_MTK_F2FS_DEBUG
+			if (!bvec.bv_len)
+				BUG();
+#endif
 
 			if (bio && (cur != last_pa ||
 				    last_bdev != mdev.m_bdev)) {
