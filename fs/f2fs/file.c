@@ -39,6 +39,9 @@
 static vm_fault_t f2fs_filemap_fault(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	vm_flags_t flags = vmf->vma->vm_flags;
+#endif
 	vm_fault_t ret;
 
 	ret = filemap_fault(vmf);
@@ -46,7 +49,11 @@ static vm_fault_t f2fs_filemap_fault(struct vm_fault *vmf)
 		f2fs_update_iostat(F2FS_I_SB(inode), inode,
 					APP_MAPPED_READ_IO, F2FS_BLKSIZE);
 
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	trace_f2fs_filemap_fault(inode, vmf->pgoff, flags, ret);
+#else
 	trace_f2fs_filemap_fault(inode, vmf->pgoff, vmf->vma->vm_flags, ret);
+#endif
 
 	return ret;
 }
