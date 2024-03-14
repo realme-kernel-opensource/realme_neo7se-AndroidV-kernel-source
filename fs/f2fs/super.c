@@ -1746,6 +1746,10 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 
 static int f2fs_freeze(struct super_block *sb)
 {
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	pr_err("f2fs_freeze sb %llx by %s (%u)\n", (u64)sb, current->comm, (u32)current->pid);
+#endif
+
 	if (f2fs_readonly(sb))
 		return 0;
 
@@ -1767,6 +1771,9 @@ static int f2fs_freeze(struct super_block *sb)
 
 static int f2fs_unfreeze(struct super_block *sb)
 {
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	pr_err("f2fs_unfreeze sb %llx by %s (%u)\n", (u64)sb, current->comm, (u32)current->pid);
+#endif
 	clear_sbi_flag(F2FS_SB(sb), SBI_IS_FREEZING);
 	return 0;
 }

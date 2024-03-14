@@ -1871,6 +1871,10 @@ static void lockdep_sb_freeze_acquire(struct super_block *sb)
 
 static void sb_freeze_unlock(struct super_block *sb, int level)
 {
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	if (sb->s_magic == 0xf2f52010)
+		pr_err("sb_freeze_unlock %llx , level %d\n", (u64)sb, level);
+#endif
 	for (level--; level >= 0; level--)
 		percpu_up_write(sb->s_writers.rw_sem + level);
 }
@@ -1941,6 +1945,10 @@ int freeze_super(struct super_block *sb, enum freeze_holder who)
 {
 	int ret;
 
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	if (sb->s_magic == 0xf2f52010)
+		pr_err("freeze_super sb %llx, who %u\n", (u64)sb, (u32)who);
+#endif
 	atomic_inc(&sb->s_active);
 	if (!super_lock_excl(sb))
 		WARN(1, "Dying superblock while freezing!");
