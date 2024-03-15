@@ -12,6 +12,7 @@
 
 #include <asm/kvm_emulate.h>
 
+#include <nvhe/alloc.h>
 #include <nvhe/arm-smccc.h>
 #include <nvhe/mem_protect.h>
 #include <nvhe/memory.h>
@@ -335,16 +336,6 @@ static void *map_donated_memory_noclear(unsigned long host_va, size_t size)
 	return va;
 }
 
-static void *map_donated_memory(unsigned long host_va, size_t size)
-{
-	void *va = map_donated_memory_noclear(host_va, size);
-
-	if (va)
-		memset(va, 0, size);
-
-	return va;
-}
-
 static void __unmap_donated_memory(void *va, size_t size)
 {
 	kvm_flush_dcache_to_poc(va, size);
@@ -369,20 +360,6 @@ static void unmap_donated_memory_noclear(void *va, size_t size)
 	__unmap_donated_memory(va, size);
 }
 
-static void
-teardown_donated_memory(struct kvm_hyp_memcache *mc, void *addr, size_t size)
-{
-	void *start;
-
-	size = PAGE_ALIGN(size);
-	memset(addr, 0, size);
-
-	for (start = addr; start < addr + size; start += PAGE_SIZE)
-		push_hyp_memcache(mc, start, hyp_virt_to_phys);
-
-	unmap_donated_memory_noclear(addr, size);
-}
-
 /*
  * Return the hyp vm structure corresponding to the handle.
  */
@@ -403,18 +380,40 @@ int __pkvm_reclaim_dying_guest_page(pkvm_handle_t handle, u64 pfn, u64 ipa)
 
 	hyp_read_lock(&vm_table_lock);
 	hyp_vm = get_vm_by_handle(handle);
-	if (!hyp_vm || !READ_ONCE(hyp_vm->is_dying))
+	if (!hyp_vm || !hyp_vm->is_dying)
 		goto unlock;
 
 	ret = __pkvm_host_reclaim_page(hyp_vm, pfn, ipa);
 	if (ret)
 		goto unlock;
 
-	drain_hyp_pool(hyp_vm, &hyp_vm->host_kvm->arch.pkvm.teardown_mc);
+	drain_hyp_pool(hyp_vm, &hyp_vm->host_kvm->arch.pkvm.stage2_teardown_mc);
 unlock:
 	hyp_read_unlock(&vm_table_lock);
 
 	return ret;
+}
+
+struct pkvm_hyp_vm *pkvm_get_hyp_vm(pkvm_handle_t handle)
+{
+	struct pkvm_hyp_vm *hyp_vm;
+
+	hyp_read_lock(&vm_table_lock);
+	hyp_vm = get_vm_by_handle(handle);
+	if (hyp_vm) {
+		if (WARN_ON(hyp_vm->is_dying))
+			hyp_vm = NULL;
+		else
+			hyp_refcount_inc(hyp_vm->refcount);
+	}
+	hyp_read_unlock(&vm_table_lock);
+
+	return hyp_vm;
+}
+
+void pkvm_put_hyp_vm(struct pkvm_hyp_vm *hyp_vm)
+{
+	hyp_refcount_dec(hyp_vm->refcount);
 }
 
 struct pkvm_hyp_vcpu *pkvm_load_hyp_vcpu(pkvm_handle_t handle,
@@ -429,7 +428,7 @@ struct pkvm_hyp_vcpu *pkvm_load_hyp_vcpu(pkvm_handle_t handle,
 
 	hyp_read_lock(&vm_table_lock);
 	hyp_vm = get_vm_by_handle(handle);
-	if (!hyp_vm || READ_ONCE(hyp_vm->is_dying) || READ_ONCE(hyp_vm->nr_vcpus) <= vcpu_idx)
+	if (!hyp_vm || hyp_vm->is_dying || READ_ONCE(hyp_vm->nr_vcpus) <= vcpu_idx)
 		goto unlock;
 
 	hyp_vcpu = hyp_vm->vcpus[vcpu_idx];
@@ -441,7 +440,7 @@ struct pkvm_hyp_vcpu *pkvm_load_hyp_vcpu(pkvm_handle_t handle,
 		goto unlock;
 	}
 
-	hyp_page_ref_inc(hyp_virt_to_page(hyp_vm));
+	hyp_refcount_inc(hyp_vm->refcount);
 unlock:
 	hyp_read_unlock(&vm_table_lock);
 
@@ -469,7 +468,7 @@ void pkvm_put_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 	 * so this must come last.
 	 */
 	smp_wmb();
-	hyp_page_ref_dec(hyp_virt_to_page(hyp_vm));
+	hyp_refcount_dec(hyp_vm->refcount);
 }
 
 struct pkvm_hyp_vcpu *pkvm_get_loaded_hyp_vcpu(void)
@@ -575,10 +574,15 @@ static int pkvm_vcpu_init_psci(struct pkvm_hyp_vcpu *hyp_vcpu)
 	return 0;
 }
 
-static void unpin_host_vcpu(struct kvm_vcpu *host_vcpu)
+static void unpin_host_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
+	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
+	void *hyp_reqs = hyp_vcpu->vcpu.arch.hyp_reqs;
+
 	if (host_vcpu)
 		hyp_unpin_shared_mem(host_vcpu, host_vcpu + 1);
+	if (hyp_reqs)
+		hyp_unpin_shared_mem(hyp_reqs, hyp_reqs + 1);
 }
 
 static void unpin_host_sve_state(struct pkvm_hyp_vcpu *hyp_vcpu)
@@ -595,15 +599,11 @@ static void unpin_host_sve_state(struct pkvm_hyp_vcpu *hyp_vcpu)
 
 static void teardown_sve_state(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
+	struct pkvm_hyp_vm *hyp_vm = pkvm_hyp_vcpu_to_hyp_vm(hyp_vcpu);
 	void *sve_state = hyp_vcpu->vcpu.arch.sve_state;
 
-	if (sve_state) {
-		struct kvm_hyp_memcache *vcpu_mc;
-
-		vcpu_mc = &hyp_vcpu->vcpu.arch.pkvm_memcache;
-		teardown_donated_memory(vcpu_mc, sve_state,
-					vcpu_sve_state_size(&hyp_vcpu->vcpu));
-	}
+	if (sve_state)
+		hyp_free_account(sve_state, hyp_vm->host_kvm);
 }
 
 static void unpin_host_vcpus(struct pkvm_hyp_vcpu *hyp_vcpus[],
@@ -614,7 +614,7 @@ static void unpin_host_vcpus(struct pkvm_hyp_vcpu *hyp_vcpus[],
 	for (i = 0; i < nr_vcpus; i++) {
 		struct pkvm_hyp_vcpu *hyp_vcpu = hyp_vcpus[i];
 
-		unpin_host_vcpu(hyp_vcpu->host_vcpu);
+		unpin_host_vcpu(hyp_vcpu);
 
 		if (!pkvm_hyp_vcpu_is_protected(hyp_vcpu))
 			unpin_host_sve_state(hyp_vcpu);
@@ -652,16 +652,23 @@ static int init_pkvm_hyp_vcpu_sve(struct pkvm_hyp_vcpu *hyp_vcpu, struct kvm_vcp
 	size_t sve_state_size = _vcpu_sve_state_size(sve_max_vl);
 	int ret = 0;
 
-	if (!sve_state || !sve_state_size || (sve_max_vl > kvm_sve_max_vl)) {
+	if (!sve_state && !pkvm_hyp_vcpu_is_protected(hyp_vcpu)) {
+		ret = -EINVAL;
+		goto err;
+	}
+
+	if (!sve_state_size || (sve_max_vl > kvm_sve_max_vl)) {
 		ret = -EINVAL;
 		goto err;
 	}
 
 	if (pkvm_hyp_vcpu_is_protected(hyp_vcpu)) {
-		sve_state = map_donated_memory((unsigned long) sve_state,
-					        sve_state_size);
+		struct pkvm_hyp_vm *hyp_vm = pkvm_hyp_vcpu_to_hyp_vm(hyp_vcpu);
+
+		sve_state = hyp_alloc_account(sve_state_size,
+					      hyp_vm->host_kvm);
 		if (!sve_state) {
-			ret = -ENOMEM;
+			ret = hyp_alloc_errno();
 			goto err;
 		}
 	} else {
@@ -690,6 +697,13 @@ static int init_pkvm_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu,
 	if (hyp_pin_shared_mem(host_vcpu, host_vcpu + 1))
 		return -EBUSY;
 
+	hyp_vcpu->vcpu.arch.hyp_reqs = kern_hyp_va(host_vcpu->arch.hyp_reqs);
+	if (hyp_pin_shared_mem(hyp_vcpu->vcpu.arch.hyp_reqs,
+			       hyp_vcpu->vcpu.arch.hyp_reqs + 1)) {
+		hyp_unpin_shared_mem(host_vcpu, host_vcpu + 1);
+		return -EBUSY;
+	}
+
 	if (host_vcpu->vcpu_idx != vcpu_idx) {
 		ret = -EINVAL;
 		goto done;
@@ -711,6 +725,7 @@ static int init_pkvm_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu,
 	hyp_vcpu->vcpu.arch.cflags = READ_ONCE(host_vcpu->arch.cflags);
 	hyp_vcpu->vcpu.arch.mp_state.mp_state = mp_state;
 	hyp_vcpu->vcpu.arch.debug_ptr = &host_vcpu->arch.vcpu_debug_state;
+	hyp_vcpu->vcpu.arch.hyp_reqs->type = KVM_HYP_LAST_REQ;
 
 	pkvm_vcpu_init_features_from_host(hyp_vcpu);
 
@@ -732,7 +747,7 @@ static int init_pkvm_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu,
 	kvm_reset_pvm_sys_regs(&hyp_vcpu->vcpu);
 done:
 	if (ret)
-		unpin_host_vcpu(host_vcpu);
+		unpin_host_vcpu(hyp_vcpu);
 	return ret;
 }
 
@@ -808,24 +823,19 @@ static size_t pkvm_get_hyp_vm_size(unsigned int nr_vcpus)
  * Unmaps the donated memory from the host at stage 2.
  *
  * host_kvm: A pointer to the host's struct kvm.
- * vm_hva: The host va of the area being donated for the VM state.
- *	   Must be page aligned.
  * pgd_hva: The host va of the area being donated for the stage-2 PGD for
  *	    the VM. Must be page aligned. Its size is implied by the VM's
  *	    VTCR.
- * last_ran_hva: The host va of the area being donated for hyp to use to track
- *		 the most recent physical cpu on which each vcpu has run.
  * Return a unique handle to the protected VM on success,
  * negative error code on failure.
  */
-int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
-		   unsigned long pgd_hva, unsigned long last_ran_hva)
+int __pkvm_init_vm(struct kvm *host_kvm, unsigned long pgd_hva)
 {
 	struct pkvm_hyp_vm *hyp_vm = NULL;
 	int *last_ran = NULL;
-	size_t vm_size, pgd_size, last_ran_size;
 	unsigned int nr_vcpus;
 	void *pgd = NULL;
+	size_t pgd_size;
 	int ret;
 
 	ret = hyp_pin_shared_mem(host_kvm, host_kvm + 1);
@@ -838,23 +848,24 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 		goto err_unpin_kvm;
 	}
 
-	vm_size = pkvm_get_hyp_vm_size(nr_vcpus);
-	last_ran_size = pkvm_get_last_ran_size();
+	hyp_vm = hyp_alloc_account(pkvm_get_hyp_vm_size(nr_vcpus),
+				   host_kvm);
+	if (!hyp_vm) {
+		ret = hyp_alloc_errno();
+		goto err_unpin_kvm;
+	}
+
+	last_ran = hyp_alloc_account(pkvm_get_last_ran_size(), host_kvm);
+	if (!last_ran) {
+		ret = hyp_alloc_errno();
+		goto err_free_vm;
+	}
+
+	ret = -EINVAL;
 	pgd_size = kvm_pgtable_stage2_pgd_size(host_mmu.arch.vtcr);
-
-	ret = -ENOMEM;
-
-	hyp_vm = map_donated_memory(vm_hva, vm_size);
-	if (!hyp_vm)
-		goto err_remove_mappings;
-
-	last_ran = map_donated_memory(last_ran_hva, last_ran_size);
-	if (!last_ran)
-		goto err_remove_mappings;
-
 	pgd = map_donated_memory_noclear(pgd_hva, pgd_size);
 	if (!pgd)
-		goto err_remove_mappings;
+		goto err_free_last_ran;
 
 	init_pkvm_hyp_vm(host_kvm, hyp_vm, last_ran, nr_vcpus);
 
@@ -874,10 +885,11 @@ err_remove_vm_table_entry:
 	remove_vm_table_entry(hyp_vm->kvm.arch.pkvm.handle);
 err_unlock:
 	hyp_write_unlock(&vm_table_lock);
-err_remove_mappings:
-	unmap_donated_memory(hyp_vm, vm_size);
-	unmap_donated_memory(last_ran, last_ran_size);
 	unmap_donated_memory(pgd, pgd_size);
+err_free_last_ran:
+	hyp_free_account(last_ran, host_kvm);
+err_free_vm:
+	hyp_free_account(hyp_vm, host_kvm);
 err_unpin_kvm:
 	hyp_unpin_shared_mem(host_kvm, host_kvm + 1);
 	return ret;
@@ -889,28 +901,27 @@ err_unpin_kvm:
  *
  * handle: The handle for the protected vm.
  * host_vcpu: A pointer to the corresponding host vcpu.
- * vcpu_hva: The host va of the area being donated for the vcpu state.
- *	     Must be page aligned. The size of the area must be equal to
- *	     the page-aligned size of 'struct pkvm_hyp_vcpu'.
+ *
  * Return 0 on success, negative error code on failure.
  */
-int __pkvm_init_vcpu(pkvm_handle_t handle, struct kvm_vcpu *host_vcpu,
-		     unsigned long vcpu_hva)
+int __pkvm_init_vcpu(pkvm_handle_t handle, struct kvm_vcpu *host_vcpu)
 {
 	struct pkvm_hyp_vcpu *hyp_vcpu;
 	struct pkvm_hyp_vm *hyp_vm;
 	unsigned int idx;
 	int ret;
 
-	hyp_vcpu = map_donated_memory(vcpu_hva, sizeof(*hyp_vcpu));
-	if (!hyp_vcpu)
-		return -ENOMEM;
-
 	hyp_read_lock(&vm_table_lock);
 
 	hyp_vm = get_vm_by_handle(handle);
 	if (!hyp_vm) {
 		ret = -ENOENT;
+		goto unlock_vm;
+	}
+
+	hyp_vcpu = hyp_alloc_account(sizeof(*hyp_vcpu), hyp_vm->host_kvm);
+	if (!hyp_vcpu) {
+		ret = hyp_alloc_errno();
 		goto unlock_vm;
 	}
 
@@ -930,11 +941,11 @@ int __pkvm_init_vcpu(pkvm_handle_t handle, struct kvm_vcpu *host_vcpu,
 
 unlock_vcpus:
 	hyp_spin_unlock(&hyp_vm->vcpus_lock);
-unlock_vm:
-	hyp_read_unlock(&vm_table_lock);
 
 	if (ret)
-		unmap_donated_memory(hyp_vcpu, sizeof(*hyp_vcpu));
+		hyp_free_account(hyp_vcpu, hyp_vm->host_kvm);
+unlock_vm:
+	hyp_read_unlock(&vm_table_lock);
 
 	return ret;
 }
@@ -944,12 +955,12 @@ int __pkvm_start_teardown_vm(pkvm_handle_t handle)
 	struct pkvm_hyp_vm *hyp_vm;
 	int ret = 0;
 
-	hyp_read_lock(&vm_table_lock);
+	hyp_write_lock(&vm_table_lock);
 	hyp_vm = get_vm_by_handle(handle);
 	if (!hyp_vm) {
 		ret = -ENOENT;
 		goto unlock;
-	} else if (WARN_ON(hyp_page_count(hyp_vm))) {
+	} else if (WARN_ON(hyp_refcount_get(hyp_vm->refcount))) {
 		ret = -EBUSY;
 		goto unlock;
 	} else if (hyp_vm->is_dying) {
@@ -960,15 +971,13 @@ int __pkvm_start_teardown_vm(pkvm_handle_t handle)
 	hyp_vm->is_dying = true;
 
 unlock:
-	hyp_read_unlock(&vm_table_lock);
+	hyp_write_unlock(&vm_table_lock);
 
 	return ret;
 }
 
 int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 {
-	size_t vm_size, last_ran_size;
-	int __percpu *last_vcpu_ran;
 	struct kvm_hyp_memcache *mc;
 	struct pkvm_hyp_vm *hyp_vm;
 	struct kvm *host_kvm;
@@ -998,7 +1007,7 @@ int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 	 * worrying about anybody else.
 	 */
 
-	mc = &host_kvm->arch.pkvm.teardown_mc;
+	mc = &host_kvm->arch.pkvm.stage2_teardown_mc;
 	destroy_hyp_vm_pgt(hyp_vm);
 	drain_hyp_pool(hyp_vm, mc);
 	unpin_host_vcpus(hyp_vm->vcpus, hyp_vm->nr_vcpus);
@@ -1009,7 +1018,7 @@ int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 		struct kvm_hyp_memcache *vcpu_mc;
 		void *addr;
 
-		vcpu_mc = &hyp_vcpu->vcpu.arch.pkvm_memcache;
+		vcpu_mc = &hyp_vcpu->vcpu.arch.stage2_mc;
 		while (vcpu_mc->nr_pages) {
 			addr = pop_hyp_memcache(vcpu_mc, hyp_phys_to_virt);
 			push_hyp_memcache(mc, addr, hyp_virt_to_phys);
@@ -1019,16 +1028,12 @@ int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 		if (pkvm_hyp_vcpu_is_protected(hyp_vcpu))
 			teardown_sve_state(hyp_vcpu);
 
-		teardown_donated_memory(mc, hyp_vcpu, sizeof(*hyp_vcpu));
+		hyp_free_account(hyp_vcpu, host_kvm);
 	}
 
-	last_vcpu_ran = hyp_vm->kvm.arch.mmu.last_vcpu_ran;
-	last_ran_size = pkvm_get_last_ran_size();
-	teardown_donated_memory(mc, (__force void *)last_vcpu_ran,
-				last_ran_size);
-
-	vm_size = pkvm_get_hyp_vm_size(hyp_vm->kvm.created_vcpus);
-	teardown_donated_memory(mc, hyp_vm, vm_size);
+	hyp_free_account((__force void *)hyp_vm->kvm.arch.mmu.last_vcpu_ran,
+			 host_kvm);
+	hyp_free_account(hyp_vm, host_kvm);
 	hyp_unpin_shared_mem(host_kvm, host_kvm + 1);
 	return 0;
 
@@ -1132,6 +1137,32 @@ void pkvm_reset_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 	WARN_ON(hyp_vcpu->power_state != PSCI_0_2_AFFINITY_LEVEL_ON_PENDING);
 	WRITE_ONCE(vcpu->arch.mp_state.mp_state, KVM_MP_STATE_RUNNABLE);
 	WRITE_ONCE(hyp_vcpu->power_state, PSCI_0_2_AFFINITY_LEVEL_ON);
+}
+
+struct kvm_hyp_req *pkvm_hyp_req_reserve(struct pkvm_hyp_vcpu *hyp_vcpu, u8 type)
+{
+	struct kvm_hyp_req *next, *hyp_req = hyp_vcpu->vcpu.arch.hyp_reqs;
+	int i;
+
+	for (i = 0; i < KVM_HYP_REQ_MAX; i++) {
+		if (hyp_req->type == KVM_HYP_LAST_REQ)
+			break;
+		hyp_req++;
+	}
+
+	/* The last entry of the page _must_ be a LAST_REQ */
+	WARN_ON(i >= KVM_HYP_REQ_MAX);
+
+	/* We need at least one empty slot to write LAST_REQ */
+	if (i + 1 >= KVM_HYP_REQ_MAX)
+		return NULL;
+
+	hyp_req->type = type;
+
+	next = hyp_req + 1;
+	next->type = KVM_HYP_LAST_REQ;
+
+	return hyp_req;
 }
 
 struct pkvm_hyp_vcpu *pkvm_mpidr_to_hyp_vcpu(struct pkvm_hyp_vm *hyp_vm,
@@ -1414,6 +1445,25 @@ static u64 __pkvm_memshare_page_req(struct pkvm_hyp_vcpu *hyp_vcpu, u64 ipa)
 	return ARM_EXCEPTION_TRAP;
 }
 
+static int pkvm_handle_empty_memcache(struct pkvm_hyp_vcpu *hyp_vcpu,
+				      u64 *exit_code)
+{
+	struct kvm_hyp_req *req;
+
+	req = pkvm_hyp_req_reserve(hyp_vcpu, KVM_HYP_REQ_TYPE_MEM);
+	if (!req)
+		return -ENOMEM;
+
+	req->mem.dest = REQ_MEM_DEST_VCPU_MEMCACHE;
+	req->mem.nr_pages = kvm_mmu_cache_min_pages(hyp_vcpu->vcpu.kvm);
+
+	write_sysreg_el2(read_sysreg_el2(SYS_ELR) - 4, SYS_ELR);
+
+	*exit_code = ARM_EXCEPTION_HYP_REQ;
+
+	return 0;
+}
+
 static bool pkvm_memshare_call(struct pkvm_hyp_vcpu *hyp_vcpu, u64 *exit_code)
 {
 	struct kvm_vcpu *vcpu = &hyp_vcpu->vcpu;
@@ -1436,6 +1486,11 @@ static bool pkvm_memshare_call(struct pkvm_hyp_vcpu *hyp_vcpu, u64 *exit_code)
 		 * being shared is mapped into the guest next time.
 		 */
 		*exit_code = __pkvm_memshare_page_req(hyp_vcpu, ipa);
+		goto out_host;
+	case -ENOMEM:
+		if (pkvm_handle_empty_memcache(hyp_vcpu, exit_code))
+			goto out_guest_err;
+
 		goto out_host;
 	}
 
@@ -1476,16 +1531,8 @@ static bool pkvm_install_ioguard_page(struct pkvm_hyp_vcpu *hyp_vcpu, u64 *exit_
 	int ret;
 
 	ret = __pkvm_install_ioguard_page(hyp_vcpu, ipa);
-	if (ret == -ENOMEM) {
-		/*
-		 * We ran out of memcache, let's ask for more. Cancel
-		 * the effects of the HVC that took us here, and
-		 * forward the hypercall to the host for page donation
-		 * purposes.
-		 */
-		write_sysreg_el2(read_sysreg_el2(SYS_ELR) - 4, SYS_ELR);
+	if (ret == -ENOMEM && !pkvm_handle_empty_memcache(hyp_vcpu, exit_code))
 		return false;
-	}
 
 	if (ret)
 		retval = SMCCC_RET_INVALID_PARAMETER;

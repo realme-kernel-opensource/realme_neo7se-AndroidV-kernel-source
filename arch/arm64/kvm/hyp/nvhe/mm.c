@@ -111,6 +111,11 @@ int __pkvm_create_private_mapping(phys_addr_t phys, size_t size,
 	return err;
 }
 
+int __hyp_allocator_map(unsigned long va, phys_addr_t phys)
+{
+	return __pkvm_create_mappings(va, PAGE_SIZE, phys, PAGE_HYP);
+}
+
 #ifdef CONFIG_NVHE_EL2_DEBUG
 static unsigned long mod_range_start = ULONG_MAX;
 static unsigned long mod_range_end;
@@ -495,4 +500,18 @@ int refill_memcache(struct kvm_hyp_memcache *mc, unsigned long min_pages,
 	*host_mc = tmp;
 
 	return ret;
+}
+
+phys_addr_t __pkvm_private_range_pa(void *va)
+{
+	kvm_pte_t pte;
+	u32 level;
+
+	hyp_spin_lock(&pkvm_pgd_lock);
+	WARN_ON(kvm_pgtable_get_leaf(&pkvm_pgtable, (u64)va, &pte, &level));
+	hyp_spin_unlock(&pkvm_pgd_lock);
+
+	BUG_ON(!kvm_pte_valid(pte));
+
+	return kvm_pte_to_phys(pte) + offset_in_page(va);
 }
