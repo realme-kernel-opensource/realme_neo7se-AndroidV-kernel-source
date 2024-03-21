@@ -1645,11 +1645,17 @@ EXPORT_SYMBOL_GPL(hrtimer_active);
  * a false negative if the read side got smeared over multiple consecutive
  * __run_hrtimer() invocations.
  */
-
+#if IS_ENABLED(CONFIG_MTK_IRQ_MONITOR_DEBUG)
+void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
+			  struct hrtimer_clock_base *base,
+			  struct hrtimer *timer, ktime_t *now,
+			  unsigned long flags) __must_hold(&cpu_base->lock)
+#else
 static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 			  struct hrtimer_clock_base *base,
 			  struct hrtimer *timer, ktime_t *now,
 			  unsigned long flags) __must_hold(&cpu_base->lock)
+#endif
 {
 	enum hrtimer_restart (*fn)(struct hrtimer *);
 	bool expires_in_hardirq;
@@ -1946,7 +1952,11 @@ void hrtimer_run_queues(void)
 /*
  * Sleep related functions:
  */
+#if IS_ENABLED(CONFIG_MTK_IRQ_MONITOR_DEBUG)
+enum hrtimer_restart hrtimer_wakeup(struct hrtimer *timer)
+#else
 static enum hrtimer_restart hrtimer_wakeup(struct hrtimer *timer)
+#endif
 {
 	struct hrtimer_sleeper *t =
 		container_of(timer, struct hrtimer_sleeper, timer);
