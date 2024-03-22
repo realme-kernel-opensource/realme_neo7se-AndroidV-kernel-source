@@ -239,4 +239,13 @@ int snd_usb_unregister_offload_ops(void)
 #endif /* IS_ENABLED(CONFIG_SND_USB_AUDIO) */
 #endif /* IS_ENABLED(CONFIG_MTK_USB_OFFLOAD_DEBUG) */
 
+struct snd_usb_platform_ops {
+	void (*connect_cb)(struct snd_usb_audio *chip);
+	void (*disconnect_cb)(struct snd_usb_audio *chip);
+	void (*suspend_cb)(struct usb_interface *intf, pm_message_t message);
+	void (*resume_cb)(struct usb_interface *intf);
+};
+
+int snd_usb_register_platform_ops(struct snd_usb_platform_ops *ops);
+int snd_usb_unregister_platform_ops(void);
 #endif /* __USBAUDIO_CARD_H */

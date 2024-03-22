@@ -255,6 +255,11 @@ DECLARE_HOOK(android_vh_free_task,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p));
 
+DECLARE_HOOK(android_vh_copy_process,
+	TP_PROTO(struct task_struct *p, int nr_threads),
+	TP_ARGS(p, nr_threads));
+
+
 enum uclamp_id;
 struct uclamp_se;
 DECLARE_RESTRICTED_HOOK(android_rvh_uclamp_eff_get,
@@ -343,8 +348,12 @@ DECLARE_HOOK(android_vh_sched_pelt_multiplier,
 	TP_ARGS(old, cur, ret));
 
 DECLARE_RESTRICTED_HOOK(android_rvh_find_energy_efficient_cpu,
-        TP_PROTO(struct task_struct *p, int prev_cpu, int sync, int *new_cpu),
-        TP_ARGS(p, prev_cpu, sync, new_cpu), 1);
+	TP_PROTO(struct task_struct *p, int prev_cpu, int sync, int *new_cpu),
+	TP_ARGS(p, prev_cpu, sync, new_cpu), 1);
+
+DECLARE_RESTRICTED_HOOK(android_rvh_cpu_util_cfs_boost,
+	TP_PROTO(int cpu, unsigned long *util),
+	TP_ARGS(cpu, util), 1);
 
 /* macro versions of hooks are no longer required */
 
