@@ -9981,8 +9981,13 @@ static int ufshcd_resume(struct ufs_hba *hba)
 
 	/* Make sure clocks are enabled before accessing controller */
 	ret = ufshcd_setup_clocks(hba, true);
-	if (ret)
+	if (ret) {
+		/* For debugging UFS HCE bus hang */
+#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG_BUILD)
+		BUG_ON(1);
+#endif
 		goto disable_vreg;
+	}
 
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
