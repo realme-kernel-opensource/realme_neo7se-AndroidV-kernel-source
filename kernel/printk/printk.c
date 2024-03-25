@@ -481,6 +481,15 @@ static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
 
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+static atomic_t uart_status __read_mostly = ATOMIC_INIT(0);
+void set_uart_status(int value)
+{
+	atomic_set(&uart_status, value);
+}
+EXPORT_SYMBOL_GPL(set_uart_status);
+#endif
+
 /*
  * Define the average message size. This only affects the number of
  * descriptors that will be available. Underestimating is better than
@@ -2090,8 +2099,15 @@ static inline u32 printk_caller_id(void)
 	if (caller_id)
 		return caller_id;
 
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+#define UART_INDEX	(1000000)
+#define CPU_INDEX	(100000)
+	return (in_task() ? 0 : 0x80000000) + atomic_read(&uart_status) * UART_INDEX +
+		raw_smp_processor_id() * CPU_INDEX + task_pid_nr(current);
+#else
 	return in_task() ? task_pid_nr(current) :
 		0x80000000 + smp_processor_id();
+#endif
 }
 
 /**
@@ -3541,6 +3557,11 @@ void register_console(struct console *newcon)
 
 	console_sysfs_notify();
 
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+	if (!strncmp(newcon->name, "ttyS", 4))
+		atomic_set(&uart_status, 1);
+#endif
+
 	/*
 	 * By unregistering the bootconsoles after we enable the real console
 	 * we get the "console xxx enabled" message on all the consoles -
@@ -3570,6 +3591,11 @@ static int unregister_console_locked(struct console *console)
 	int res;
 
 	lockdep_assert_console_list_lock_held();
+
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+	if (!strncmp(console->name, "ttyS", 4))
+		atomic_set(&uart_status, 0);
+#endif
 
 	con_printk(KERN_INFO, console, "disabled\n");
 
