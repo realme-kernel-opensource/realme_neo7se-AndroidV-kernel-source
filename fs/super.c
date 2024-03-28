@@ -2061,6 +2061,10 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 	if (sb->s_writers.frozen == SB_FREEZE_COMPLETE) {
 		if (!(sb->s_writers.freeze_holders & who)) {
 			super_unlock_excl(sb);
+#ifdef CONFIG_MTK_F2FS_DEBUG
+			if (sb->s_magic == 0xf2f52010)
+				pr_err("thaw_super_locked fail1\n");
+#endif
 			return -EINVAL;
 		}
 
@@ -2072,10 +2076,18 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 		if (sb->s_writers.freeze_holders & ~who) {
 			sb->s_writers.freeze_holders &= ~who;
 			deactivate_locked_super(sb);
+#ifdef CONFIG_MTK_F2FS_DEBUG
+			if (sb->s_magic == 0xf2f52010)
+				pr_err("thaw_super_locked fail2\n");
+#endif
 			return 0;
 		}
 	} else {
 		super_unlock_excl(sb);
+#ifdef CONFIG_MTK_F2FS_DEBUG
+		if (sb->s_magic == 0xf2f52010)
+			pr_err("thaw_super_locked fail3\n");
+#endif
 		return -EINVAL;
 	}
 
@@ -2083,6 +2095,10 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 		sb->s_writers.freeze_holders &= ~who;
 		sb->s_writers.frozen = SB_UNFROZEN;
 		wake_up_var(&sb->s_writers.frozen);
+#ifdef CONFIG_MTK_F2FS_DEBUG
+		if (sb->s_magic == 0xf2f52010)
+			pr_err("thaw_super_locked fail4\n");
+#endif
 		goto out;
 	}
 
