@@ -5561,12 +5561,13 @@ static int __netif_receive_skb_one_core(struct sk_buff *skb, bool pfmemalloc)
 	int ret;
 
 	ret = __netif_receive_skb_core(&skb, pfmemalloc, &pt_prev);
+	if (pt_prev) {
 #if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-	skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
+		skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
 #endif
-	if (pt_prev)
 		ret = INDIRECT_CALL_INET(pt_prev->func, ipv6_rcv, ip_rcv, skb,
 					 skb->dev, pt_prev, orig_dev);
+	}
 	return ret;
 }
 
