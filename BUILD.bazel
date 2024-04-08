@@ -120,6 +120,7 @@ filegroup(
         "android/abi_gki_aarch64_qcom",
         "android/abi_gki_aarch64_unisoc",
         "android/abi_gki_aarch64_virtual_device",
+        "android/abi_gki_aarch64_xiaomi",
     ],
     visibility = ["//visibility:public"],
 )
@@ -2401,4 +2402,14 @@ copy_to_dist_dir(
     data = [":tests_zip_arm64"],
     dist_dir = "out/tests_arm64/dist",
     flat = True,
+)
+
+_TEST_MAPPINGS = glob(["**/TEST_MAPPING"])
+
+pkg_files(
+    name = "test_mappings",
+    srcs = _TEST_MAPPINGS,
+    prefix = package_name(),
+    renames = {file: file for file in _TEST_MAPPINGS},
+    visibility = ["//kernel/tests/test_mappings:__pkg__"],
 )

@@ -24,7 +24,7 @@
 #include <nvhe/modules.h>
 #include <nvhe/mm.h>
 #include <nvhe/pkvm.h>
-#include <nvhe/trace.h>
+#include <nvhe/trace/trace.h>
 #include <nvhe/trap_handler.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
@@ -763,13 +763,28 @@ static void sync_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu, u32 exit_reason)
 	hyp_vcpu->exit_code = exit_reason;
 }
 
-static void __hyp_sve_save_guest(struct pkvm_hyp_vcpu *hyp_vcpu)
+static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 {
-	struct kvm_vcpu *vcpu = &hyp_vcpu->vcpu;
+	u64 zcr_el1 = read_sysreg_el1(SYS_ZCR);
+	u64 zcr_el2 = min(zcr_el1, vcpu_sve_max_vq(vcpu) - 1ULL);
 
+	__vcpu_sys_reg(vcpu, ZCR_EL1) = zcr_el1;
+	sve_cond_update_zcr_vq(zcr_el2, SYS_ZCR_EL2);
 	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu->arch.ctxt.fp_regs.fpsr);
-	__vcpu_sys_reg(vcpu, ZCR_EL1) = read_sysreg_el1(SYS_ZCR);
-	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL1);
+	sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
+}
+
+static void __hyp_sve_restore_host(struct kvm_vcpu *vcpu)
+{
+	struct kvm_host_sve_state *sve_state = get_host_sve_state(vcpu);
+	u64 zcr_el2 = sve_vq_from_vl(kvm_host_sve_max_vl) - 1;
+
+	write_sysreg_el1(sve_state->zcr_el1, SYS_ZCR);
+	sve_cond_update_zcr_vq(zcr_el2, SYS_ZCR_EL2);
+	__sve_restore_state(sve_state->sve_regs +
+				sve_ffr_offset(kvm_host_sve_max_vl),
+				&sve_state->fpsr);
+	sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
 }
 
 static void fpsimd_host_restore(void)
@@ -787,28 +802,17 @@ static void fpsimd_host_restore(void)
 		struct kvm_vcpu *vcpu = &hyp_vcpu->vcpu;
 
 		if (vcpu_has_sve(vcpu))
-			__hyp_sve_save_guest(hyp_vcpu);
+			__hyp_sve_save_guest(vcpu);
 		else
-			__fpsimd_save_state(&hyp_vcpu->vcpu.arch.ctxt.fp_regs);
+			__fpsimd_save_state(&vcpu->arch.ctxt.fp_regs);
 
-		if (system_supports_sve()) {
-			struct kvm_host_sve_state *sve_state = get_host_sve_state(vcpu);
-			u64 vq_len = sve_vq_from_vl(kvm_host_sve_max_vl) - 1;
-
-			write_sysreg_el1(sve_state->zcr_el1, SYS_ZCR);
-			sve_cond_update_zcr_vq(vq_len, SYS_ZCR_EL2);
-			__sve_restore_state(sve_state->sve_regs +
-					    sve_ffr_offset(kvm_host_sve_max_vl),
-					    &sve_state->fpsr);
-		} else {
+		if (system_supports_sve())
+			__hyp_sve_restore_host(vcpu);
+		else
 			__fpsimd_restore_state(get_host_fpsimd_state(vcpu));
-		}
 
 		hyp_vcpu->vcpu.arch.fp_state = FP_STATE_HOST_OWNED;
 	}
-
-	if (system_supports_sve())
-		sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
 }
 
 static void handle___pkvm_vcpu_load(struct kvm_cpu_context *host_ctxt)
@@ -1563,6 +1567,18 @@ static void handle___pkvm_host_hvc_pd(struct kvm_cpu_context *host_ctxt)
 	cpu_reg(host_ctxt, 1) = pkvm_host_hvc_pd(device_id, on);
 }
 
+static void handle___pkvm_stage2_snapshot(struct kvm_cpu_context *host_ctxt)
+{
+#ifdef CONFIG_NVHE_EL2_DEBUG
+	DECLARE_REG(struct kvm_pgtable_snapshot *, snapshot_hva, host_ctxt, 1);
+	DECLARE_REG(pkvm_handle_t, handle, host_ctxt, 2);
+
+	cpu_reg(host_ctxt, 1) = pkvm_stage2_snapshot_by_handle(snapshot_hva, handle);
+#else
+	cpu_reg(host_ctxt, 0) = SMCCC_RET_NOT_SUPPORTED;
+#endif
+}
+
 typedef void (*hcall_t)(struct kvm_cpu_context *);
 
 #define HANDLE_FUNC(x)	[__KVM_HOST_SMCCC_FUNC_##x] = (hcall_t)handle_##x
@@ -1626,6 +1642,7 @@ static const hcall_t host_hcall[] = {
 	HANDLE_FUNC(__pkvm_host_iommu_unmap_pages),
 	HANDLE_FUNC(__pkvm_host_iommu_iova_to_phys),
 	HANDLE_FUNC(__pkvm_host_hvc_pd),
+	HANDLE_FUNC(__pkvm_stage2_snapshot),
 };
 
 static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
@@ -1633,9 +1650,6 @@ static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
 	DECLARE_REG(unsigned long, id, host_ctxt, 0);
 	unsigned long hcall_min = 0;
 	hcall_t hfn;
-
-	if (handle_host_dynamic_hcall(host_ctxt) == HCALL_HANDLED)
-		return;
 
 	/*
 	 * If pKVM has been initialised then reject any calls to the
@@ -1652,6 +1666,9 @@ static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
 	id &= ~ARM_SMCCC_CALL_HINTS;
 	id -= KVM_HOST_SMCCC_ID(0);
 
+	if (handle_host_dynamic_hcall(&host_ctxt->regs, id) == HCALL_HANDLED)
+		goto end;
+
 	if (unlikely(id < hcall_min || id >= ARRAY_SIZE(host_hcall)))
 		goto inval;
 
@@ -1661,7 +1678,7 @@ static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
 
 	cpu_reg(host_ctxt, 0) = SMCCC_RET_SUCCESS;
 	hfn(host_ctxt);
-
+end:
 	trace_host_hcall(id, 0);
 
 	return;
