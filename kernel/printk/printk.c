@@ -2162,6 +2162,10 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 			 va_list args)
 {
 	u16 text_len;
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+	u16 mtk_prefix_len;
+	char textbuf[TASK_COMM_LEN + 3];
+#endif
 
 	text_len = vscnprintf(text, size, fmt, args);
 
@@ -2181,6 +2185,21 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 			memmove(text, text + prefix_len, text_len);
 		}
 	}
+
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+	if (!(*flags & LOG_CONT)) {
+		mtk_prefix_len = scnprintf(textbuf, sizeof(textbuf), "%s: ", current->comm);
+		if (likely((text_len + mtk_prefix_len) < size)) {
+			memmove(text + mtk_prefix_len, text, text_len);
+			text_len += mtk_prefix_len;
+		} else {
+			memmove(text + mtk_prefix_len, text, size - 1 - mtk_prefix_len);
+			text_len = size - 1;
+		}
+		memcpy(text, textbuf, mtk_prefix_len);
+		text[size - 1] = '\0';
+	}
+#endif
 
 	trace_console(text, text_len);
 
@@ -2266,6 +2285,11 @@ int vprintk_store(int facility, int level,
 	 * prb_reserve_in_last() and prb_reserve() purposely invalidate the
 	 * structure when they fail.
 	 */
+#ifdef CONFIG_MTK_PRINTK_DEBUG
+	reserve_size += strnlen(current->comm, TASK_COMM_LEN) + 2;
+	if (reserve_size > PRINTKRB_RECORD_MAX)
+		reserve_size = PRINTKRB_RECORD_MAX;
+#endif
 	prb_rec_init_wr(&r, reserve_size);
 	if (!prb_reserve(&e, prb, &r)) {
 		/* truncate the message if it is too long for empty buffer */
