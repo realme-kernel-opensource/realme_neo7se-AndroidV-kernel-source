@@ -614,6 +614,9 @@ static int mte_cpu_online(unsigned int cpu)
 	/*
 	 * Read cpu register
 	 */
+	if (!system_supports_mte())
+		return 0;
+
 	SYS_GCR_EL1_r = read_sysreg_s(SYS_GCR_EL1);
 	SYS_MAIR_EL1_r = read_sysreg_s(SYS_MAIR_EL1);
 	SYS_RGSR_EL1_r = read_sysreg_s(SYS_RGSR_EL1);
@@ -637,6 +640,9 @@ static int mte_cpu_offline(unsigned int cpu)
 static int __init mte_cpu_init(void)
 {
 	int ret = 0;
+
+	if (!system_supports_mte())
+		return 0;
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "mte:online",
 				mte_cpu_online, mte_cpu_offline);

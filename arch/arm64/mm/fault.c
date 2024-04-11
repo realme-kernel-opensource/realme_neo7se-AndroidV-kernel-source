@@ -405,12 +405,14 @@ static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 	/*
 	 * Read cpu register
 	 */
-	pr_info("GCR_EL1: 0x%llx\n", read_sysreg_s(SYS_GCR_EL1));
-	pr_info("SYS_MAIR_EL1: 0x%llx\n", read_sysreg_s(SYS_MAIR_EL1));
-	pr_info("SYS_RGSR_EL1: 0x%llx\n", read_sysreg_s(SYS_RGSR_EL1));
-	pr_info("SYS_TFSR_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSR_EL1));
-	pr_info("SYS_TFSRE0_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSRE0_EL1));
-	mem_abort_decode(esr);
+	if (system_supports_mte()) {
+		pr_info("GCR_EL1: 0x%llx\n", read_sysreg_s(SYS_GCR_EL1));
+		pr_info("SYS_MAIR_EL1: 0x%llx\n", read_sysreg_s(SYS_MAIR_EL1));
+		pr_info("SYS_RGSR_EL1: 0x%llx\n", read_sysreg_s(SYS_RGSR_EL1));
+		pr_info("SYS_TFSR_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSR_EL1));
+		pr_info("SYS_TFSRE0_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSRE0_EL1));
+		mem_abort_decode(esr);
+	}
 #endif
 
 	if (WARN_RATELIMIT(is_spurious_el1_translation_fault(addr, esr, regs),
