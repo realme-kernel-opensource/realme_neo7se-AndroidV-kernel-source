@@ -1695,10 +1695,6 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 
 static int f2fs_freeze(struct super_block *sb)
 {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-	pr_err("f2fs_freeze sb %llx by %s (%u)\n", (u64)sb, current->comm, (u32)current->pid);
-#endif
-
 	if (f2fs_readonly(sb))
 		return 0;
 
@@ -1720,9 +1716,6 @@ static int f2fs_freeze(struct super_block *sb)
 
 static int f2fs_unfreeze(struct super_block *sb)
 {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-	pr_err("f2fs_unfreeze sb %llx by %s (%u)\n", (u64)sb, current->comm, (u32)current->pid);
-#endif
 	clear_sbi_flag(F2FS_SB(sb), SBI_IS_FREEZING);
 	return 0;
 }
@@ -4122,9 +4115,22 @@ void f2fs_handle_critical_error(struct f2fs_sb_info *sbi, unsigned char reason,
 	if (shutdown)
 		set_sbi_flag(sbi, SBI_IS_SHUTDOWN);
 
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	/*
+	 * continue filesystem operators if errors=continue. Should not set
+	 * RO by shutdown, since RO bypasses thaw_super which can hang the
+	 * system.
+	 */
+	if (continue_fs || f2fs_readonly(sb) ||
+				reason == STOP_CP_REASON_SHUTDOWN) {
+		f2fs_warn(sbi, "Stopped filesystem due to reason: %d", reason);
+		return;
+	}
+#else
 	/* continue filesystem operators if errors=continue */
 	if (continue_fs || f2fs_readonly(sb))
 		return;
+#endif
 
 	f2fs_warn(sbi, "Remounting filesystem read-only");
 	/*
