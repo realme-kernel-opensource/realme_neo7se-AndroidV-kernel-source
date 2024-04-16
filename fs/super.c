@@ -1874,10 +1874,6 @@ static void lockdep_sb_freeze_acquire(struct super_block *sb)
 
 static void sb_freeze_unlock(struct super_block *sb, int level)
 {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-	if (sb->s_magic == 0xf2f52010)
-		pr_err("sb_freeze_unlock %llx , level %d\n", (u64)sb, level);
-#endif
 	for (level--; level >= 0; level--)
 		percpu_up_write(sb->s_writers.rw_sem + level);
 }
@@ -1948,10 +1944,6 @@ int freeze_super(struct super_block *sb, enum freeze_holder who)
 {
 	int ret;
 
-#ifdef CONFIG_MTK_F2FS_DEBUG
-	if (sb->s_magic == 0xf2f52010)
-		pr_err("freeze_super sb %llx, who %u\n", (u64)sb, (u32)who);
-#endif
 	atomic_inc(&sb->s_active);
 	if (!super_lock_excl(sb))
 		WARN(1, "Dying superblock while freezing!");
@@ -2061,10 +2053,6 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 	if (sb->s_writers.frozen == SB_FREEZE_COMPLETE) {
 		if (!(sb->s_writers.freeze_holders & who)) {
 			super_unlock_excl(sb);
-#ifdef CONFIG_MTK_F2FS_DEBUG
-			if (sb->s_magic == 0xf2f52010)
-				pr_err("thaw_super_locked fail1\n");
-#endif
 			return -EINVAL;
 		}
 
@@ -2076,18 +2064,10 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 		if (sb->s_writers.freeze_holders & ~who) {
 			sb->s_writers.freeze_holders &= ~who;
 			deactivate_locked_super(sb);
-#ifdef CONFIG_MTK_F2FS_DEBUG
-			if (sb->s_magic == 0xf2f52010)
-				pr_err("thaw_super_locked fail2\n");
-#endif
 			return 0;
 		}
 	} else {
 		super_unlock_excl(sb);
-#ifdef CONFIG_MTK_F2FS_DEBUG
-		if (sb->s_magic == 0xf2f52010)
-			pr_err("thaw_super_locked fail3\n");
-#endif
 		return -EINVAL;
 	}
 
@@ -2095,10 +2075,6 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 		sb->s_writers.freeze_holders &= ~who;
 		sb->s_writers.frozen = SB_UNFROZEN;
 		wake_up_var(&sb->s_writers.frozen);
-#ifdef CONFIG_MTK_F2FS_DEBUG
-		if (sb->s_magic == 0xf2f52010)
-			pr_err("thaw_super_locked fail4\n");
-#endif
 		goto out;
 	}
 

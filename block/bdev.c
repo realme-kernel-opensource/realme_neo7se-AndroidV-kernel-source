@@ -230,17 +230,11 @@ int freeze_bdev(struct block_device *bdev)
 
 	mutex_lock(&bdev->bd_fsfreeze_mutex);
 	if (++bdev->bd_fsfreeze_count > 1) {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-		pr_err("freeze_bdev1a\n");
-#endif
 		goto done;
 	}
 
 	sb = get_active_super(bdev);
 	if (!sb) {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-		pr_err("freeze_bdev2a\n");
-#endif
 		goto sync;
 	}
 	if (sb->s_op->freeze_super)
@@ -250,10 +244,6 @@ int freeze_bdev(struct block_device *bdev)
 	deactivate_super(sb);
 
 	if (error) {
-#ifdef CONFIG_MTK_F2FS_DEBUG
-		if (sb->s_magic == 0xf2f52010)
-			pr_err("freeze_bdev3a\n");
-#endif
 		bdev->bd_fsfreeze_count--;
 		goto done;
 	}
