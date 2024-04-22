@@ -608,26 +608,20 @@ size_t mte_probe_user_range(const char __user *uaddr, size_t size)
 #ifdef CONFIG_MTK_MTE_DEBUG
 static int mte_cpu_online(unsigned int cpu)
 {
-	unsigned long SYS_GCR_EL1_r, SYS_MAIR_EL1_r, SYS_RGSR_EL1_r;
-	unsigned long SYS_TFSR_EL1_r, SYS_TFSRE0_EL1_r;
-
 	/*
 	 * Read cpu register
 	 */
 	if (!system_supports_mte())
 		return 0;
 
-	SYS_GCR_EL1_r = read_sysreg_s(SYS_GCR_EL1);
-	SYS_MAIR_EL1_r = read_sysreg_s(SYS_MAIR_EL1);
-	SYS_RGSR_EL1_r = read_sysreg_s(SYS_RGSR_EL1);
-	SYS_TFSR_EL1_r = read_sysreg_s(SYS_TFSR_EL1);
-	SYS_TFSRE0_EL1_r = read_sysreg_s(SYS_TFSRE0_EL1);
-
-	pr_info("GCR_EL1: 0x%lx\n", SYS_GCR_EL1_r);
-	pr_info("SYS_MAIR_EL1: 0x%lx\n", SYS_MAIR_EL1_r);
-	pr_info("SYS_RGSR_EL1: 0x%lx\n", SYS_RGSR_EL1_r);
-	pr_info("SYS_TFSR_EL1: 0x%lx\n", SYS_TFSR_EL1_r);
-	pr_info("SYS_TFSRE0_EL1: 0x%lx\n", SYS_TFSRE0_EL1_r);
+	pr_info("ID_AA64PFR1_EL1_r: 0x%llx\n", read_sysreg_s(SYS_ID_AA64PFR1_EL1));
+	pr_info("GCR_EL1: 0x%llx\n", read_sysreg_s(SYS_GCR_EL1));
+	pr_info("MAIR_EL1: 0x%llx\n", read_sysreg_s(SYS_MAIR_EL1));
+	pr_info("SCTLR_EL1: 0x%llx\n", read_sysreg_s(SYS_SCTLR_EL1));
+	pr_info("RGSR_EL1: 0x%llx\n", read_sysreg_s(SYS_RGSR_EL1));
+	pr_info("TFSR_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSR_EL1));
+	pr_info("TFSRE0_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSRE0_EL1));
+	pr_info("GMID_EL1: 0x%llx\n", read_sysreg_s(SYS_GMID_EL1));
 
 	return 0;
 }
