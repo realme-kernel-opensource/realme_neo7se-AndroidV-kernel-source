@@ -405,7 +405,7 @@ static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 	/*
 	 * Read cpu register
 	 */
-	if (system_supports_mte()) {
+	if (system_supports_mte() && is_el1_mte_sync_tag_check_fault(esr)) {
 		u8 ptr_tag =  arch_kasan_get_tag(addr);
 		u8 mem_tag =  arch_get_mem_tag((void *)addr);
 		pr_info("ID_AA64PFR1_EL1_r: 0x%llx\n", read_sysreg_s(SYS_ID_AA64PFR1_EL1));
