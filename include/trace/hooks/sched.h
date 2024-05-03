@@ -366,6 +366,11 @@ DECLARE_RESTRICTED_HOOK(android_rvh_cpu_util_cfs_boost,
 	TP_PROTO(int cpu, unsigned long *util),
 	TP_ARGS(cpu, util), 1);
 
+struct affinity_context;
+DECLARE_RESTRICTED_HOOK(android_rvh_set_cpus_allowed_ptr,
+	TP_PROTO(struct task_struct *p, struct affinity_context *ctx, bool *skip_user_ptr),
+	TP_ARGS(p, ctx, skip_user_ptr), 1);
+
 DECLARE_HOOK(android_vh_account_process_tick_gran,
 	TP_PROTO(struct task_struct *p, struct rq *rq, int user_tick, int *ticks),
 	TP_ARGS(p, rq, user_tick, ticks));
