@@ -10,6 +10,9 @@
 #include <linux/filelock.h>
 #include <linux/filter.h>
 #include <linux/fs_stack.h>
+#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
+#include <linux/splice.h>
+#endif
 #include <linux/namei.h>
 
 #include "../internal.h"
@@ -973,6 +976,20 @@ void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 
 	return ERR_PTR(fwio->ret);
 }
+
+#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
+ssize_t fuse_splice_read_backing(struct file *in, loff_t *ppos,
+		struct pipe_inode_info *pipe, size_t len, unsigned long flags)
+{
+	struct fuse_file *ff = in->private_data;
+	ssize_t ret;
+
+	ret = vfs_splice_read(ff->backing_file, ppos, pipe, len, flags);
+	fuse_file_accessed(in, ff->backing_file);
+
+	return ret;
+}
+#endif
 
 long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags)
 {
