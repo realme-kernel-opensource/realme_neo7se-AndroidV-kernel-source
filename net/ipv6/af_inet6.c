@@ -68,6 +68,8 @@
 #include <linux/uaccess.h>
 #include <linux/mroute6.h>
 
+#include <trace/hooks/net.h>
+
 #include "ip6_offload.h"
 
 MODULE_AUTHOR("Cast of dozens");
@@ -270,6 +272,9 @@ lookup_protocol:
 			goto out;
 		}
 	}
+
+	trace_android_rvh_inet_sock_create(sk);
+
 out:
 	return err;
 out_rcu_unlock:
@@ -1064,6 +1069,7 @@ static const struct ipv6_bpf_stub ipv6_bpf_stub_impl = {
 	.udp6_lib_lookup = __udp6_lib_lookup,
 	.ipv6_setsockopt = do_ipv6_setsockopt,
 	.ipv6_getsockopt = do_ipv6_getsockopt,
+	.ipv6_dev_get_saddr = ipv6_dev_get_saddr,
 };
 
 static int __init inet6_init(void)
