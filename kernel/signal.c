@@ -1102,6 +1102,12 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	int override_rlimit;
 	int ret = 0, result;
 
+#if IS_ENABLED(CONFIG_MTK_PANIC_ON_WARN)
+	if (!strcmp(t->comm, "init") && sig == SIGBUS) {
+		pr_info("sig 7(bus) to init pid 1 had been transfer to sig 11(segv)\n");
+		sig = SIGSEGV;
+	}
+#endif
 	lockdep_assert_held(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
