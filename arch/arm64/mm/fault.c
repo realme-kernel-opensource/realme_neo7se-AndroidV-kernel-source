@@ -404,20 +404,13 @@ static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 
 #if defined(CONFIG_MTK_MTE_DEBUG) && defined(CONFIG_KASAN_HW_TAGS)
 	/*
-	 * Read cpu register
+	 * Return if mte_tag is zero
 	 */
 	if (system_supports_mte() && is_el1_mte_sync_tag_check_fault(esr)) {
 		u8 ptr_tag =  arch_kasan_get_tag(addr);
 		u8 mem_tag =  arch_get_mem_tag((void *)addr);
-		pr_info("ID_AA64PFR1_EL1_r: 0x%llx\n", read_sysreg_s(SYS_ID_AA64PFR1_EL1));
-		pr_info("GCR_EL1: 0x%llx\n", read_sysreg_s(SYS_GCR_EL1));
-		pr_info("MAIR_EL1: 0x%llx\n", read_sysreg_s(SYS_MAIR_EL1));
-		pr_info("SCTLR_EL1: 0x%llx\n", read_sysreg_s(SYS_SCTLR_EL1));
-		pr_info("RGSR_EL1: 0x%llx\n", read_sysreg_s(SYS_RGSR_EL1));
-		pr_info("TFSR_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSR_EL1));
-		pr_info("TFSRE0_EL1: 0x%llx\n", read_sysreg_s(SYS_TFSRE0_EL1));
-		pr_info("GMID_EL1: 0x%llx\n", read_sysreg_s(SYS_GMID_EL1));
-		mem_abort_decode(esr);
+		if (mem_tag == 0xF0)
+			return;
 		if (ptr_tag == mem_tag)
 			return;
 	}
