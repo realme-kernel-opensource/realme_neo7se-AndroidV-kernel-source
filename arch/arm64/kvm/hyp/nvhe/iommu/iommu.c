@@ -636,6 +636,12 @@ static inline int pkvm_to_iommu_prot(int prot)
 void kvm_iommu_host_stage2_idmap(phys_addr_t start, phys_addr_t end,
 				 enum kvm_pgtable_prot prot)
 {
+#if IS_ENABLED(CONFIG_MTK_PKVM_SMMU_WA)
+	struct kvm_hyp_iommu_domain domain;
+
+	if (kvm_iommu_ops && kvm_iommu_ops->host_stage2_idmap)
+		kvm_iommu_ops->host_stage2_idmap(&domain, start, end, pkvm_to_iommu_prot(prot));
+#else
 	struct kvm_hyp_iommu_domain *domain;
 
 	if (!kvm_iommu_is_ready())
@@ -646,6 +652,7 @@ void kvm_iommu_host_stage2_idmap(phys_addr_t start, phys_addr_t end,
 		return;
 
 	kvm_iommu_ops->host_stage2_idmap(domain, start, end, pkvm_to_iommu_prot(prot));
+#endif /* CONFIG_MTK_PKVM_SMMU_WA */
 }
 
 static int __snapshot_host_stage2(const struct kvm_pgtable_visit_ctx *ctx,
