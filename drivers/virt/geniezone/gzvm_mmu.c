@@ -231,14 +231,19 @@ int gzvm_vm_allocate_guest_page(struct gzvm *vm, struct gzvm_memslot *slot,
 				u64 gfn, u64 *pfn)
 {
 	unsigned long hva;
-
-	if (gzvm_gfn_to_pfn_memslot(slot, gfn, pfn) != 0)
-		return -EFAULT;
+	int ret;
 
 	if (gzvm_gfn_to_hva_memslot(slot, gfn, (u64 *)&hva) != 0)
 		return -EINVAL;
 
-	return pin_one_page(vm, hva, PFN_PHYS(gfn));
+	ret = pin_one_page(vm, hva, PFN_PHYS(gfn));
+	if (ret != 0)
+		return ret;
+
+	if (gzvm_gfn_to_pfn_memslot(slot, gfn, pfn) != 0)
+		return -EFAULT;
+
+	return 0;
 }
 
 static int handle_block_demand_page(struct gzvm *vm, int memslot_id, u64 gfn)
