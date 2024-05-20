@@ -1027,7 +1027,6 @@ static void fuse_readahead(struct readahead_control *rac)
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	unsigned int i, max_pages, nr_pages = 0;
 
-#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
 #ifdef CONFIG_FUSE_BPF
 	/*
 	 * Currently no meaningful readahead is possible with fuse-bpf within
@@ -1036,7 +1035,6 @@ static void fuse_readahead(struct readahead_control *rac)
 	 */
 	if (!get_fuse_inode(inode)->nodeid)
 		return;
-#endif
 #endif
 
 	if (fuse_is_bad(inode))
@@ -2589,7 +2587,8 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 		return fuse_passthrough_mmap(file, vma);
 
 	if (ff->open_flags & FOPEN_DIRECT_IO) {
-		/* Can't provide the coherency needed for MAP_SHARED
+		/*
+		 * Can't provide the coherency needed for MAP_SHARED
 		 * if FUSE_DIRECT_IO_ALLOW_MMAP isn't set.
 		 */
 		if ((vma->vm_flags & VM_MAYSHARE) && !fc->direct_io_allow_mmap)
@@ -2597,7 +2596,10 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 
 		invalidate_inode_pages2(file->f_mapping);
 
-		return generic_file_mmap(file, vma);
+		if (!(vma->vm_flags & VM_MAYSHARE)) {
+			/* MAP_PRIVATE */
+			return generic_file_mmap(file, vma);
+		}
 	}
 
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE))
@@ -2763,7 +2765,6 @@ static int fuse_file_flock(struct file *file, int cmd, struct file_lock *fl)
 	return err;
 }
 
-#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
 static ssize_t fuse_splice_read(struct file *in, loff_t *ppos,
 		struct pipe_inode_info *pipe, size_t len, unsigned int flags)
 {
@@ -2777,7 +2778,6 @@ static ssize_t fuse_splice_read(struct file *in, loff_t *ppos,
 
 	return filemap_splice_read(in, ppos, pipe, len, flags);
 }
-#endif
 
 static sector_t fuse_bmap(struct address_space *mapping, sector_t block)
 {
@@ -3391,11 +3391,7 @@ static const struct file_operations fuse_file_operations = {
 	.lock		= fuse_file_lock,
 	.get_unmapped_area = thp_get_unmapped_area,
 	.flock		= fuse_file_flock,
-#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
 	.splice_read	= fuse_splice_read,
-#else
-	.splice_read	= filemap_splice_read,
-#endif
 	.splice_write	= iter_file_splice_write,
 	.unlocked_ioctl	= fuse_file_ioctl,
 	.compat_ioctl	= fuse_file_compat_ioctl,

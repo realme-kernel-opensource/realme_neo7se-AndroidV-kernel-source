@@ -1,6 +1,7 @@
 [abi_symbol_list]
   blkdev_get_by_path
   blkdev_issue_flush
+  blk_queue_rq_timeout
   caches_clean_inval_pou
   _dev_alert
   __devm_alloc_percpu
@@ -36,6 +37,10 @@
   __traceiter_android_vh_is_fpsimd_save
   __traceiter_android_vh_logbuf
   __traceiter_android_vh_logbuf_pr_cont
+  __traceiter_android_vh_madvise_swapin_walk_pmd_entry
+  __traceiter_android_vh_process_madvise
+  __traceiter_android_vh_show_smap
+  __traceiter_android_vh_smaps_pte_entry
   __traceiter_android_vh_try_to_freeze_todo
   __traceiter_android_vh_try_to_freeze_todo_unfrozen
   __traceiter_android_vh_watchdog_timer_softlockup
@@ -53,6 +58,10 @@
   __tracepoint_android_vh_is_fpsimd_save
   __tracepoint_android_vh_logbuf
   __tracepoint_android_vh_logbuf_pr_cont
+  __tracepoint_android_vh_madvise_swapin_walk_pmd_entry
+  __tracepoint_android_vh_process_madvise
+  __tracepoint_android_vh_show_smap
+  __tracepoint_android_vh_smaps_pte_entry
   __tracepoint_android_vh_try_to_freeze_todo
   __tracepoint_android_vh_try_to_freeze_todo_unfrozen
   __tracepoint_android_vh_watchdog_timer_softlockup

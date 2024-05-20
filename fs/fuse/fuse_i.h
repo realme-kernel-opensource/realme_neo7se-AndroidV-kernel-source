@@ -1037,7 +1037,6 @@ static inline bool fuse_stale_inode(const struct inode *inode, int generation,
 
 static inline void fuse_make_bad(struct inode *inode)
 {
-	remove_inode_hash(inode);
 	set_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state);
 }
 
@@ -1710,10 +1709,8 @@ int fuse_file_write_iter_backing(struct fuse_bpf_args *fa,
 void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 		struct kiocb *iocb, struct iov_iter *from);
 
-#ifdef CONFIG_MTK_FUSE_UPSTREAM_BUILD
 ssize_t fuse_splice_read_backing(struct file *in, loff_t *ppos,
 		struct pipe_inode_info *pipe, size_t len, unsigned long flags);
-#endif
 
 long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags);
 

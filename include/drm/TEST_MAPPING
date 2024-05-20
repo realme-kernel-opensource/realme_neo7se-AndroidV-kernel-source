@@ -36,6 +36,14 @@
       ]
     },
     {
+      "name": "CtsWifiBroadcastsHostTestCases",
+      "options": [
+        {
+          "exclude-annotation": "com.android.testutils.SkipPresubmit"
+        }
+      ]
+    },
+    {
       "name": "vts_kernel_net_tests"
     }
   ],
@@ -53,6 +61,9 @@
       "options": [
         {
           "exclude-annotation": "com.android.testutils.SkipPresubmit"
+        },
+        {
+          "include-filter": "android.telecom.cts.PhoneAccountSuggestionServiceTest"
         }
       ]
     }
