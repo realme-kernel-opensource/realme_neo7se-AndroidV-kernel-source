@@ -123,6 +123,7 @@ struct gzvm_vm_stat {
  * @lock: lock for list_add
  * @irqfds: the data structure is used to keep irqfds's information
  * @ioevents: list head for ioevents
+ * @ioevent_lock: lock for ioevent list
  * @vm_list: list head for vm list
  * @vm_id: vm id
  * @irq_ack_notifier_list: list head for irq ack notifier
@@ -153,6 +154,7 @@ struct gzvm {
 	} irqfds;
 
 	struct list_head ioevents;
+	struct mutex ioevent_lock;
 
 	struct list_head vm_list;
 	u16 vm_id;
