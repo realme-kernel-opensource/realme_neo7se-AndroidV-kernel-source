@@ -521,6 +521,9 @@ static int gzvm_create_vm_debugfs(struct gzvm *vm)
 	struct dentry *dent;
 	char dir_name[GZVM_MAX_DEBUGFS_DIR_NAME_SIZE];
 
+	if (!gzvm_debugfs_dir)
+		return -EFAULT;
+
 	if (vm->debug_dir) {
 		pr_warn("VM debugfs directory is duplicated\n");
 		return 0;
@@ -602,7 +605,9 @@ static struct gzvm *gzvm_create_vm(unsigned long vm_type)
 	list_add(&gzvm->vm_list, &gzvm_list);
 	mutex_unlock(&gzvm_list_lock);
 
-	gzvm_create_vm_debugfs(gzvm);
+	ret = gzvm_create_vm_debugfs(gzvm);
+	if (ret)
+		pr_debug("Failed to create debugfs for VM-%u\n", gzvm->vm_id);
 
 	pr_debug("VM-%u is created\n", gzvm->vm_id);
 
