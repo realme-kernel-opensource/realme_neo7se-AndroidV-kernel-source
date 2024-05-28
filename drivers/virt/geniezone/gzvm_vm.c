@@ -95,6 +95,33 @@ register_memslot_addr_range(struct gzvm *gzvm, struct gzvm_memslot *memslot)
 }
 
 /**
+ * memory_region_pre_check() - Preliminary check for userspace memory region
+ * @gzvm: Pointer to struct gzvm.
+ * @mem: Input memory region from user.
+ *
+ * Return: true for check passed, false for invalid input.
+ */
+static bool
+memory_region_pre_check(struct gzvm *gzvm,
+			struct gzvm_userspace_memory_region *mem)
+{
+	if (mem->slot >= GZVM_MAX_MEM_REGION)
+		return false;
+
+	if (!PAGE_ALIGNED(mem->guest_phys_addr) ||
+	    !PAGE_ALIGNED(mem->memory_size))
+		return false;
+
+	if (mem->guest_phys_addr + mem->memory_size < mem->guest_phys_addr)
+		return false;
+
+	if ((mem->memory_size >> PAGE_SHIFT) > GZVM_MEM_MAX_NR_PAGES)
+		return false;
+
+	return true;
+}
+
+/**
  * gzvm_vm_ioctl_set_memory_region() - Set memory region of guest
  * @gzvm: Pointer to struct gzvm.
  * @mem: Input memory region from user.
@@ -114,8 +141,8 @@ gzvm_vm_ioctl_set_memory_region(struct gzvm *gzvm,
 	struct gzvm_memslot *memslot;
 	unsigned long size;
 
-	if (mem->slot >= GZVM_MAX_MEM_REGION)
-		return -ENXIO;
+	if (memory_region_pre_check(gzvm, mem) != true)
+		return -EINVAL;
 
 	memslot = &gzvm->memslot[mem->slot];
 

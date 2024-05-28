@@ -75,6 +75,12 @@ struct gzvm_memory_region_ranges {
 	struct mem_region_addr_range constituents[];
 };
 
+/*
+ * A reasonable and large enough limit for the maximum number of pages a
+ * guest can use.
+ */
+#define GZVM_MEM_MAX_NR_PAGES		((1UL << 31) - 1)
+
 /**
  * struct gzvm_memslot: VM's memory slot descriptor
  * @base_gfn: begin of guest page frame
