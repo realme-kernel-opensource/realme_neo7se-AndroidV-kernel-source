@@ -229,14 +229,12 @@ int freeze_bdev(struct block_device *bdev)
 	int error = 0;
 
 	mutex_lock(&bdev->bd_fsfreeze_mutex);
-	if (++bdev->bd_fsfreeze_count > 1) {
+	if (++bdev->bd_fsfreeze_count > 1)
 		goto done;
-	}
 
 	sb = get_active_super(bdev);
-	if (!sb) {
+	if (!sb)
 		goto sync;
-	}
 	if (sb->s_op->freeze_super)
 		error = sb->s_op->freeze_super(sb, FREEZE_HOLDER_USERSPACE);
 	else
