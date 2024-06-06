@@ -2279,10 +2279,16 @@ static void _vm_unmap_aliases(unsigned long start, unsigned long end, int flush)
 	for_each_possible_cpu(cpu) {
 		struct vmap_block_queue *vbq = &per_cpu(vmap_block_queue, cpu);
 		struct vmap_block *vb;
+#if !IS_ENABLED(CONFIG_MTK_VM_DEBUG)
 		unsigned long idx;
+#endif
 
 		rcu_read_lock();
+#if !IS_ENABLED(CONFIG_MTK_VM_DEBUG)
 		xa_for_each(&vbq->vmap_blocks, idx, vb) {
+#else
+		list_for_each_entry_rcu(vb, &vbq->free, free_list) {
+#endif
 			spin_lock(&vb->lock);
 
 			/*
