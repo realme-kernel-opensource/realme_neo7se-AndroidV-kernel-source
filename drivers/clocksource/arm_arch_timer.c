@@ -407,10 +407,6 @@ static u64 notrace sun50i_a64_read_cntvct_el0(void)
 }
 #endif
 
-#if IS_ENABLED(CONFIG_MEDIATEK_ERRATUM_690001)
-static bool arch_timer_mem_sne_use_tval __ro_after_init;
-#endif
-
 #ifdef CONFIG_ARM_ARCH_TIMER_OOL_WORKAROUND
 DEFINE_PER_CPU(const struct arch_timer_erratum_workaround *, timer_unstable_counter_workaround);
 EXPORT_SYMBOL_GPL(timer_unstable_counter_workaround);
@@ -812,19 +808,6 @@ static __always_inline void set_next_event_mem(const int access, unsigned long e
 		cnt = arch_counter_get_cnt_mem(timer, CNTPCT_LO);
 
 	arch_timer_reg_write(access, ARCH_TIMER_REG_CVAL, evt + cnt, clk);
-#if IS_ENABLED(CONFIG_MEDIATEK_ERRATUM_690001)
-	if (arch_timer_mem_sne_use_tval) {
-		/* Due to the incomplete implementation of mmio timer on
-		 * specific MediaTek platforms, CVAL has not been implemented.
-		 * Therefore, the workaround is to use TVAL in addition to
-		 * CVAL.
-		 */
-		if (access == ARCH_TIMER_MEM_VIRT_ACCESS)
-			writel_relaxed(evt, timer->base + 0x38);
-		else
-			writel_relaxed(evt, timer->base + 0x28);
-	}
-#endif
 	arch_timer_reg_write(access, ARCH_TIMER_REG_CTRL, ctrl, clk);
 }
 
@@ -921,16 +904,7 @@ static void __arch_timer_setup(unsigned type,
 				arch_timer_set_next_event_phys_mem;
 		}
 
-#if IS_ENABLED(CONFIG_MEDIATEK_ERRATUM_690001)
-		if (arch_timer_mem_sne_use_tval) {
-			pr_info("Enabling mediatek,erratum-690001 for mmio timer\n");
-			max_delta = CLOCKSOURCE_MASK(32);
-		} else {
-			max_delta = CLOCKSOURCE_MASK(56);
-		}
-#else
 		max_delta = CLOCKSOURCE_MASK(56);
-#endif
 	}
 
 	clk->set_state_shutdown(clk);
@@ -1651,9 +1625,6 @@ static int __init arch_timer_mem_of_init(struct device_node *np)
 		frame->valid = true;
 	}
 
-#if IS_ENABLED(CONFIG_MEDIATEK_ERRATUM_690001)
-	arch_timer_mem_sne_use_tval = of_property_read_bool(np, "mediatek,erratum-690001");
-#endif
 	frame = arch_timer_mem_find_best_frame(timer_mem);
 	if (!frame) {
 		pr_err("Unable to find a suitable frame in timer @ %pa\n",
