@@ -390,6 +390,21 @@ static bool is_translation_fault(unsigned long esr)
 	return (esr & ESR_ELx_FSC_TYPE) == ESR_ELx_FSC_FAULT;
 }
 
+#if defined(CONFIG_MTK_MTE_DEBUG) && defined(CONFIG_KASAN_HW_TAGS)
+static void __iomem *sw_trigger_base;
+
+static int __init sw_trigger_init(void)
+{
+	if (!system_supports_mte())
+		return 0;
+	sw_trigger_base = ioremap(0x0c1d0030, 0x4);
+	if (!sw_trigger_base)
+		pr_info("Failed to trigger!\n");
+	return 0;
+}
+late_initcall(sw_trigger_init);
+#endif
+
 static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 			      struct pt_regs *regs)
 {
@@ -411,8 +426,6 @@ static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 		u8 mem_tag = arch_get_mem_tag((void *)addr);
 
 		if (mem_tag == 0xF0 || ptr_tag == mem_tag) {
-			void __iomem *sw_trigger_base = ioremap(0x0c1d0030, 0x4);
-
 			if (!sw_trigger_base)
 				pr_info("Failed to trigger!\n");
 			else {
