@@ -212,6 +212,10 @@ int usermodehelper_read_trylock(void)
 	DEFINE_WAIT(wait);
 	int ret = 0;
 
+#if IS_ENABLED(CONFIG_MTK_SUSPEND_DEBUG)
+	dump_stack();
+	pr_info("[Claude] %s\n", __func__);
+#endif
 	down_read(&umhelper_sem);
 	for (;;) {
 		prepare_to_wait(&usermodehelper_disabled_waitq, &wait,
@@ -244,6 +248,10 @@ long usermodehelper_read_lock_wait(long timeout)
 	if (timeout < 0)
 		return -EINVAL;
 
+#if IS_ENABLED(CONFIG_MTK_SUSPEND_DEBUG)
+	dump_stack();
+	pr_info("[Claude] %s\n", __func__);
+#endif
 	down_read(&umhelper_sem);
 	for (;;) {
 		prepare_to_wait(&usermodehelper_disabled_waitq, &wait,
@@ -266,6 +274,10 @@ EXPORT_SYMBOL_GPL(usermodehelper_read_lock_wait);
 
 void usermodehelper_read_unlock(void)
 {
+#if IS_ENABLED(CONFIG_MTK_SUSPEND_DEBUG)
+	dump_stack();
+	pr_info("[Claude] %s\n", __func__);
+#endif
 	up_read(&umhelper_sem);
 }
 EXPORT_SYMBOL_GPL(usermodehelper_read_unlock);
@@ -279,6 +291,10 @@ EXPORT_SYMBOL_GPL(usermodehelper_read_unlock);
  */
 void __usermodehelper_set_disable_depth(enum umh_disable_depth depth)
 {
+#if IS_ENABLED(CONFIG_MTK_SUSPEND_DEBUG)
+	dump_stack();
+	pr_info("[Claude] %s\n", __func__);
+#endif
 	down_write(&umhelper_sem);
 	usermodehelper_disabled = depth;
 	wake_up(&usermodehelper_disabled_waitq);
@@ -298,6 +314,10 @@ int __usermodehelper_disable(enum umh_disable_depth depth)
 	if (!depth)
 		return -EINVAL;
 
+#if IS_ENABLED(CONFIG_MTK_SUSPEND_DEBUG)
+	dump_stack();
+	pr_info("[Claude] %s\n", __func__);
+#endif
 	down_write(&umhelper_sem);
 	usermodehelper_disabled = depth;
 	up_write(&umhelper_sem);
