@@ -40,9 +40,6 @@
 #include <net/route.h>
 #include <net/xfrm.h>
 
-#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-	void skb_udp_gro_debug(struct sk_buff *skb, struct sk_buff *old_fraglist);
-#endif
 static bool ip_exceeds_mtu(const struct sk_buff *skb, unsigned int mtu)
 {
 	if (skb->len <= mtu)
@@ -161,10 +158,6 @@ int ip_forward(struct sk_buff *skb)
 
 	if (READ_ONCE(net->ipv4.sysctl_ip_fwd_update_priority))
 		skb->priority = rt_tos2priority(iph->tos);
-
-	#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-		skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
-	#endif
 
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
 		       net, NULL, skb, skb->dev, rt->dst.dev,

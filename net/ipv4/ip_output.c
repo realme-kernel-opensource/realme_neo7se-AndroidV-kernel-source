@@ -88,9 +88,7 @@ static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	    unsigned int mtu,
 	    int (*output)(struct net *, struct sock *, struct sk_buff *));
-#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-	void skb_udp_gro_debug(struct sk_buff *skb, struct sk_buff *old_fraglist);
-#endif
+
 /* Generate a checksum for an outgoing IP datagram. */
 void ip_send_check(struct iphdr *iph)
 {
@@ -231,9 +229,6 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	neigh = ip_neigh_for_gw(rt, skb, &is_v6gw);
 	if (!IS_ERR(neigh)) {
 		int res;
-		#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-			skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
-		#endif
 		sock_confirm_neigh(skb, neigh);
 		/* if crossing protocols, can not use the cached header */
 		res = neigh_output(neigh, skb, is_v6gw);
@@ -433,9 +428,6 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_IP);
-#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-	skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
-#endif
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, indev, dev,
 			    ip_finish_output,

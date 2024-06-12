@@ -172,29 +172,6 @@ void drop_reasons_unregister_subsys(enum skb_drop_reason_subsys subsys)
 }
 EXPORT_SYMBOL_GPL(drop_reasons_unregister_subsys);
 
-#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-#define ETHERTYPE_IP 0x0800
-void skb_udp_gro_debug(struct sk_buff *skb, struct sk_buff *old_fraglist)
-{
-	if (!skb || skb->protocol != ntohs(ETHERTYPE_IP))
-		return;
-
-	if(!skb_shinfo(skb)->frag_list && skb_shinfo(skb)->gso_size != 0 &&
-	   (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST) &&
-	   (skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4)) {
-		pr_info("debug gso size:%d, segs:%d, gso_type:%x, skb->len:%d, data len:%d, tail:%d\n",
-			skb_shinfo(skb)->gso_size, skb_shinfo(skb)->gso_segs, skb_shinfo(skb)->gso_type,
-			skb->len, skb->data_len, skb->tail);
-		pr_info("debug udp header:%d, dev:%s, nr frags:%d, old flist:%px, skb:%px, ip len:%d\n",
-			skb->transport_header, skb->dev ? skb->dev->name : "NULL",
-			skb_shinfo(skb)->nr_frags, old_fraglist, skb,
-			ntohs(((struct iphdr *)(skb->head + skb->network_header))->tot_len));
-		dump_stack();
-	}
-}
-EXPORT_SYMBOL(skb_udp_gro_debug);
-#endif
-
 /**
  *	skb_panic - private function for out-of-line support
  *	@skb:	buffer
@@ -2747,9 +2724,6 @@ void *__pskb_pull_tail(struct sk_buff *skb, int delta)
 		/* Free pulled out fragments. */
 		while ((list = skb_shinfo(skb)->frag_list) != insp) {
 			skb_shinfo(skb)->frag_list = list->next;
-			#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-				skb_udp_gro_debug(skb, list);
-			#endif
 			consume_skb(list);
 		}
 		/* And insert new clone at head. */
@@ -2788,10 +2762,6 @@ pull_pages:
 end:
 	skb->tail     += delta;
 	skb->data_len -= delta;
-
-    #if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-		skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
-    #endif
 
 	if (!skb->data_len)
 		skb_zcopy_clear(skb, false);
@@ -4372,10 +4342,6 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 	int len_diff, err;
 
 	skb_push(skb, -skb_network_offset(skb) + offset);
-	#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-		skb_udp_gro_debug(skb, list_skb);
-	#endif
-
 	/* Ensure the head is writeable before touching the shared info */
 	err = skb_unclone(skb, GFP_ATOMIC);
 	if (err)
@@ -6633,9 +6599,6 @@ void skb_condense(struct sk_buff *skb)
 		if (skb->data_len > skb->end - skb->tail ||
 		    skb_cloned(skb))
 			return;
-		#if IS_ENABLED(CONFIG_MTK_UDP_GRO_DEBUG)
-			skb_udp_gro_debug(skb, skb_shinfo(skb)->frag_list);
-		#endif
 		/* Nice, we can free page frag(s) right now */
 		__pskb_pull_tail(skb, skb->data_len);
 	}
