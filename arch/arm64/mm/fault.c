@@ -390,21 +390,6 @@ static bool is_translation_fault(unsigned long esr)
 	return (esr & ESR_ELx_FSC_TYPE) == ESR_ELx_FSC_FAULT;
 }
 
-#if defined(CONFIG_MTK_MTE_DEBUG) && defined(CONFIG_KASAN_HW_TAGS)
-static void __iomem *sw_trigger_base;
-
-static int __init sw_trigger_init(void)
-{
-	if (!system_supports_mte())
-		return 0;
-	sw_trigger_base = ioremap(0x0c1d0030, 0x4);
-	if (!sw_trigger_base)
-		pr_info("Failed to trigger!\n");
-	return 0;
-}
-late_initcall(sw_trigger_init);
-#endif
-
 static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 			      struct pt_regs *regs)
 {
@@ -419,20 +404,17 @@ static void __do_kernel_fault(unsigned long addr, unsigned long esr,
 
 #if defined(CONFIG_MTK_MTE_DEBUG) && defined(CONFIG_KASAN_HW_TAGS)
 	/*
-	 * SW Trigger Flow
+	 * Check for false alarms
 	 */
 	if (system_supports_mte() && is_el1_mte_sync_tag_check_fault(esr)) {
 		u8 ptr_tag = arch_kasan_get_tag(addr);
 		u8 mem_tag = arch_get_mem_tag((void *)addr);
 
 		if (mem_tag == 0xF0 || ptr_tag == mem_tag) {
-			if (!sw_trigger_base)
-				pr_info("Failed to trigger!\n");
-			else {
-				pr_info("SW Trigger for MTE false alarm.\n");
-				iowrite32(0x16881681, sw_trigger_base);
-				iounmap(sw_trigger_base);
-			}
+			pr_info("This is MTE false alarm!\n");
+			pr_info("[MTE] ptr = 0x%lx, ESR = 0x%lx", addr, esr);
+			pr_info("[MTE] ptr_tag = 0x%02x, mem_tag = 0x%02x\n",
+				ptr_tag, mem_tag);
 		}
 	}
 #endif
