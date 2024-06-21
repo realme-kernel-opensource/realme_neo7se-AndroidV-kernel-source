@@ -436,12 +436,6 @@ static void setup_vm_demand_paging(struct gzvm *vm)
 	}
 }
 
-static int debugfs_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
 /**
  * hyp_mem_read() - Get size of hypervisor-allocated memory and stage 2 table
  * @file: Pointer to struct file
@@ -503,15 +497,13 @@ static ssize_t shared_mem_read(struct file *file, char __user *buf, size_t len,
 }
 
 static const struct file_operations hyp_mem_fops = {
-	.owner = THIS_MODULE,
-	.open = debugfs_open,
+	.open = simple_open,
 	.read = hyp_mem_read,
 	.llseek = no_llseek,
 };
 
 static const struct file_operations shared_mem_fops = {
-	.owner = THIS_MODULE,
-	.open = debugfs_open,
+	.open = simple_open,
 	.read = shared_mem_read,
 	.llseek = no_llseek,
 };

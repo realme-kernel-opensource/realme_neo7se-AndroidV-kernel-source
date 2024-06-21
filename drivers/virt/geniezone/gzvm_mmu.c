@@ -151,6 +151,22 @@ int gzvm_vm_allocate_guest_page(struct gzvm *vm, struct gzvm_memslot *slot,
 	return 0;
 }
 
+static int handle_single_demand_page(struct gzvm *vm, int memslot_id, u64 gfn)
+{
+	int ret;
+	u64 pfn;
+
+	ret = gzvm_vm_allocate_guest_page(vm, &vm->memslot[memslot_id], gfn, &pfn);
+	if (unlikely(ret))
+		return -EFAULT;
+
+	ret = gzvm_arch_map_guest(vm->vm_id, memslot_id, pfn, gfn, 1);
+	if (unlikely(ret))
+		return -EFAULT;
+
+	return ret;
+}
+
 static int handle_block_demand_page(struct gzvm *vm, int memslot_id, u64 gfn)
 {
 	u64 pfn, __gfn;
@@ -194,21 +210,6 @@ static int handle_block_demand_page(struct gzvm *vm, int memslot_id, u64 gfn)
 err_unlock:
 	mutex_unlock(&vm->demand_paging_lock);
 
-	return ret;
-}
-
-static int handle_single_demand_page(struct gzvm *vm, int memslot_id, u64 gfn)
-{
-	int ret;
-	u64 pfn;
-
-	ret = gzvm_vm_allocate_guest_page(vm, &vm->memslot[memslot_id], gfn, &pfn);
-	if (unlikely(ret))
-		return -EFAULT;
-
-	ret = gzvm_arch_map_guest(vm->vm_id, memslot_id, pfn, gfn, 1);
-	if (unlikely(ret))
-		return -EFAULT;
 	return ret;
 }
 

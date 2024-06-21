@@ -366,14 +366,14 @@ DECLARE_RESTRICTED_HOOK(android_rvh_cpu_util_cfs_boost,
 	TP_PROTO(int cpu, unsigned long *util),
 	TP_ARGS(cpu, util), 1);
 
+DECLARE_HOOK(android_vh_account_process_tick_gran,
+	TP_PROTO(struct task_struct *p, struct rq *rq, int user_tick, int *ticks),
+	TP_ARGS(p, rq, user_tick, ticks));
+
 struct affinity_context;
 DECLARE_RESTRICTED_HOOK(android_rvh_set_cpus_allowed_ptr,
 	TP_PROTO(struct task_struct *p, struct affinity_context *ctx, bool *skip_user_ptr),
 	TP_ARGS(p, ctx, skip_user_ptr), 1);
-
-DECLARE_HOOK(android_vh_account_process_tick_gran,
-	TP_PROTO(struct task_struct *p, struct rq *rq, int user_tick, int *ticks),
-	TP_ARGS(p, rq, user_tick, ticks));
 
 DECLARE_RESTRICTED_HOOK(android_rvh_set_cpus_allowed_comm,
 	TP_PROTO(struct task_struct *p, const struct cpumask *new_mask),
@@ -415,6 +415,10 @@ DECLARE_HOOK(android_vh_reweight_entity,
 DECLARE_RESTRICTED_HOOK(android_rvh_context_switch,
 	TP_PROTO(struct task_struct *pre, struct task_struct *next),
 	TP_ARGS(pre, next), 1);
+
+DECLARE_HOOK(android_vh_mmput,
+	TP_PROTO(void *unused),
+	TP_ARGS(unused));
 
 /* macro versions of hooks are no longer required */
 
