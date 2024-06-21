@@ -1314,9 +1314,14 @@ retry:
 		locks_wake_up_blocks(left);
 	}
  out:
+#ifdef CONFIG_MTK_F2FS_DEBUG
+	trace_posix_lock_inode(inode, request, error);
+#endif
 	spin_unlock(&ctx->flc_lock);
 	percpu_up_read(&file_rwsem);
+#ifndef CONFIG_MTK_F2FS_DEBUG
 	trace_posix_lock_inode(inode, request, error);
+#endif
 	/*
 	 * Free any unused locks.
 	 */
