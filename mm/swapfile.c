@@ -49,6 +49,11 @@
 #include "internal.h"
 #include "swap.h"
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+#define CLUSTER_FLAG_FREE	1 /* This cluster is free */
+#define CLUSTER_FLAG_NONFULL	2 /* This cluster on nonfull list  */
+#endif
+
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
 static void free_swap_count_continuations(struct swap_info_struct *);
@@ -289,10 +294,23 @@ static void discard_swap_cluster(struct swap_info_struct *si,
 #endif
 #define LATENCY_LIMIT		256
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+static inline bool cluster_is_free(struct swap_cluster_info *info)
+{
+	return info->flags & CLUSTER_FLAG_FREE;
+}
+
+static inline unsigned int cluster_index(struct swap_info_struct *si,
+					 struct swap_cluster_info *ci)
+{
+	return ci - si->cluster_info;
+}
+#else
 static inline bool cluster_is_free(struct swap_cluster_info *info)
 {
 	return info->state == CLUSTER_STATE_FREE;
 }
+#endif
 
 static inline struct swap_cluster_info *lock_cluster(struct swap_info_struct *si,
 						     unsigned long offset)
@@ -340,6 +358,66 @@ static inline void unlock_cluster_or_swap_info(struct swap_info_struct *si,
 		spin_unlock(&si->lock);
 }
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+/* Add a cluster to discard list and schedule it to do discard */
+static void swap_cluster_schedule_discard(struct swap_info_struct *si,
+		struct swap_cluster_info *ci)
+{
+	unsigned int idx = cluster_index(si, ci);
+	/*
+	 * If scan_swap_map_slots() can't find a free cluster, it will check
+	 * si->swap_map directly. To make sure the discarding cluster isn't
+	 * taken by scan_swap_map_slots(), mark the swap entries bad (occupied).
+	 * It will be cleared after discard
+	 */
+	memset(si->swap_map + idx * SWAPFILE_CLUSTER,
+			SWAP_MAP_BAD, SWAPFILE_CLUSTER);
+
+	if (ci->flags)
+		list_move_tail(&ci->list, &si->discard_clusters);
+	else
+		list_add_tail(&ci->list, &si->discard_clusters);
+	ci->flags = 0;
+	schedule_work(&si->discard_work);
+}
+
+static void __free_cluster(struct swap_info_struct *si, struct swap_cluster_info *ci)
+{
+	if (ci->flags & CLUSTER_FLAG_NONFULL)
+		list_move_tail(&ci->list, &si->free_clusters);
+	else
+		list_add_tail(&ci->list, &si->free_clusters);
+	ci->flags = CLUSTER_FLAG_FREE;
+}
+
+/*
+ * Doing discard actually. After a cluster discard is finished, the cluster
+ * will be added to free cluster list. caller should hold si->lock.
+*/
+static void swap_do_scheduled_discard(struct swap_info_struct *si)
+{
+	struct swap_cluster_info *ci;
+	unsigned int idx;
+
+	while (!list_empty(&si->discard_clusters)) {
+		ci = list_first_entry(&si->discard_clusters, struct swap_cluster_info, list);
+		list_del(&ci->list);
+		idx = cluster_index(si, ci);
+		spin_unlock(&si->lock);
+
+		discard_swap_cluster(si, idx * SWAPFILE_CLUSTER,
+				SWAPFILE_CLUSTER);
+
+		spin_lock(&si->lock);
+
+		spin_lock(&ci->lock);
+		__free_cluster(si, ci);
+		memset(si->swap_map + idx * SWAPFILE_CLUSTER,
+				0, SWAPFILE_CLUSTER);
+		spin_unlock(&ci->lock);
+	}
+}
+#else
 /* Add a cluster to discard list and schedule it to do discard */
 static void swap_cluster_schedule_discard(struct swap_info_struct *si,
 		struct swap_cluster_info *ci)
@@ -395,6 +473,7 @@ static void swap_do_scheduled_discard(struct swap_info_struct *si)
 		unlock_cluster(ci);
 	}
 }
+#endif
 
 static void swap_discard_work(struct work_struct *work)
 {
@@ -415,6 +494,18 @@ static void swap_users_ref_free(struct percpu_ref *ref)
 	complete(&si->comp);
 }
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+static struct swap_cluster_info *alloc_cluster(struct swap_info_struct *si, unsigned long idx)
+{
+	struct swap_cluster_info *ci = list_first_entry(&si->free_clusters, struct swap_cluster_info, list);
+
+	VM_BUG_ON(cluster_index(si, ci) != idx);
+	list_del(&ci->list);
+	ci->count = 0;
+	ci->flags = 0;
+	return ci;
+}
+#else
 static struct swap_cluster_info *alloc_cluster(struct swap_info_struct *si, unsigned long idx)
 {
 	struct swap_cluster_info *ci = list_first_entry(&si->free_clusters, struct swap_cluster_info, list);
@@ -424,6 +515,7 @@ static struct swap_cluster_info *alloc_cluster(struct swap_info_struct *si, unsi
 	ci->count = 0;
 	return ci;
 }
+#endif
 
 static void free_cluster(struct swap_info_struct *si, struct swap_cluster_info *ci)
 {
@@ -489,10 +581,17 @@ static void dec_cluster_info_page(struct swap_info_struct *p, struct swap_cluste
 	if (!ci->count)
 		return free_cluster(p, ci);
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+	if (!(ci->flags & CLUSTER_FLAG_NONFULL)) {
+		list_add_tail(&ci->list, &p->nonfull_clusters[ci->order]);
+		ci->flags |= CLUSTER_FLAG_NONFULL;
+	}
+#else
 	if (ci->state == CLUSTER_STATE_SCANNED) {
 		list_add_tail(&ci->list, &p->nonfull_clusters[ci->order]);
 		ci->state = CLUSTER_STATE_NONFULL;
 	}
+#endif
 }
 
 /*
@@ -532,6 +631,79 @@ static inline bool swap_range_empty(char *swap_map, unsigned int start,
 	return true;
 }
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+/*
+ * Try to get swap entries with specified order from current cpu's swap entry
+ * pool (a cluster). This might involve allocating a new cluster for current CPU
+ * too.
+ */
+static bool scan_swap_map_try_ssd_cluster(struct swap_info_struct *si,
+	unsigned long *offset, unsigned long *scan_base, int order)
+{
+	unsigned int nr_pages = 1 << order;
+	struct percpu_cluster *cluster;
+	struct swap_cluster_info *ci;
+	unsigned int tmp, max;
+
+new_cluster:
+	cluster = this_cpu_ptr(si->percpu_cluster);
+	tmp = cluster->next[order];
+	if (tmp == SWAP_NEXT_INVALID) {
+		if (!list_empty(&si->free_clusters)) {
+			ci = list_first_entry(&si->free_clusters, struct swap_cluster_info, list);
+			list_del(&ci->list);
+			spin_lock(&ci->lock);
+			ci->order = order;
+			ci->flags = 0;
+			spin_unlock(&ci->lock);
+			tmp = cluster_index(si, ci) * SWAPFILE_CLUSTER;
+		} else if (!list_empty(&si->nonfull_clusters[order])) {
+			ci = list_first_entry(&si->nonfull_clusters[order], struct swap_cluster_info, list);
+			list_del(&ci->list);
+			spin_lock(&ci->lock);
+			ci->flags = 0;
+			spin_unlock(&ci->lock);
+			tmp = cluster_index(si, ci) * SWAPFILE_CLUSTER;
+		} else if (!list_empty(&si->discard_clusters)) {
+			/*
+			 * we don't have free cluster but have some clusters in
+			 * discarding, do discard now and reclaim them, then
+			 * reread cluster_next_cpu since we dropped si->lock
+			 */
+			swap_do_scheduled_discard(si);
+			*scan_base = this_cpu_read(*si->cluster_next_cpu);
+			*offset = *scan_base;
+			goto new_cluster;
+		} else
+			return false;
+	}
+
+	/*
+	 * Other CPUs can use our cluster if they can't find a free cluster,
+	 * check if there is still free entry in the cluster, maintaining
+	 * natural alignment.
+	 */
+	max = min_t(unsigned long, si->max, ALIGN(tmp + 1, SWAPFILE_CLUSTER));
+	if (tmp < max) {
+		ci = lock_cluster(si, tmp);
+		while (tmp < max) {
+			if (swap_range_empty(si->swap_map, tmp, nr_pages))
+				break;
+			tmp += nr_pages;
+		}
+		unlock_cluster(ci);
+	}
+	if (tmp >= max) {
+		cluster->next[order] = SWAP_NEXT_INVALID;
+		goto new_cluster;
+	}
+	*offset = tmp;
+	*scan_base = tmp;
+	tmp += nr_pages;
+	cluster->next[order] = tmp < max ? tmp : SWAP_NEXT_INVALID;
+	return true;
+}
+#else
 /*
  * Try to get swap entries with specified order from current cpu's swap entry
  * pool (a cluster). This might involve allocating a new cluster for current CPU
@@ -606,6 +778,7 @@ new_cluster:
 	*scan_base = found;
 	return true;
 }
+#endif
 
 static void __del_from_avail_list(struct swap_info_struct *p)
 {
@@ -967,6 +1140,10 @@ static void swap_free_cluster(struct swap_info_struct *si, unsigned long idx)
 	ci = lock_cluster(si, offset);
 	memset(si->swap_map + offset, 0, SWAPFILE_CLUSTER);
 	ci->count = 0;
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+	ci->order = 0;
+	ci->flags = 0;
+#endif
 	free_cluster(si, ci);
 	unlock_cluster(ci);
 	swap_range_free(si, offset, SWAPFILE_CLUSTER);
@@ -2980,7 +3157,11 @@ static int setup_swap_map_and_extents(struct swap_info_struct *p,
 				continue;
 			if (ci->count)
 				continue;
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+			ci->flags = CLUSTER_FLAG_FREE;
+#else
 			ci->state = CLUSTER_STATE_FREE;
+#endif
 			list_add_tail(&ci->list, &p->free_clusters);
 		}
 	}
