@@ -15,6 +15,20 @@
 
 #define PAR_PA47_MASK GENMASK_ULL(47, 12)
 
+#ifdef CONFIG_MTK_GZ_IDLE
+static struct timecycle clock_scale_factor;
+
+u32 gzvm_vtimer_get_clock_mult(void)
+{
+	return clock_scale_factor.mult;
+}
+
+u32 gzvm_vtimer_get_clock_shift(void)
+{
+	return clock_scale_factor.shift;
+}
+#endif
+
 /**
  * gzvm_hypcall_wrapper() - the wrapper for hvc calls
  * @a0: arguments passed in registers 0
@@ -80,6 +94,21 @@ int gzvm_arch_probe(void)
 
 	return 0;
 }
+
+#ifdef CONFIG_MTK_GZ_IDLE
+int gzvm_arch_drv_init(void)
+{
+	/* timecycle init mult shift */
+	clocks_calc_mult_shift(
+		&clock_scale_factor.mult,
+		&clock_scale_factor.shift,
+		arch_timer_get_cntfrq(),
+		NSEC_PER_SEC,
+		30);
+
+	return 0;
+}
+#endif
 
 int gzvm_arch_set_memregion(u16 vm_id, size_t buf_size,
 			    phys_addr_t region)

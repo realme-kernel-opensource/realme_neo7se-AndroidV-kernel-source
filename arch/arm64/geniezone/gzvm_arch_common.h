@@ -7,6 +7,7 @@
 #define __GZVM_ARCH_COMMON_H__
 
 #include <linux/arm-smccc.h>
+#include <linux/clocksource.h>
 
 enum {
 	GZVM_FUNC_CREATE_VM = 0,
@@ -94,7 +95,19 @@ struct gzvm_vcpu_hwstate {
 	__le32 __pad;
 	__le64 lr[GIC_V3_NR_LRS];
 	__le64 vtimer_offset;
+	__le64 vtimer_delay;
+	__le32 vtimer_migrate;
 };
+
+struct timecycle {
+	u32 mult;
+	u32 shift;
+};
+
+#ifdef CONFIG_MTK_GZ_IDLE
+u32 gzvm_vtimer_get_clock_mult(void);
+u32 gzvm_vtimer_get_clock_shift(void);
+#endif
 
 static inline unsigned int
 assemble_vm_vcpu_tuple(u16 vmid, u16 vcpuid)

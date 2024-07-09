@@ -101,6 +101,11 @@ static int gzvm_drv_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Not found available conduit\n");
 		return -ENODEV;
 	}
+#ifdef CONFIG_MTK_GZ_IDLE
+	ret = gzvm_arch_drv_init();
+	if (ret)
+		return ret;
+#endif
 
 	ret = misc_register(&gzvm_dev);
 	if (ret)
