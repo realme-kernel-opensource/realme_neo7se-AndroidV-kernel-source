@@ -16,7 +16,8 @@
 
 /* maximum size needed for holding an integer */
 #define ITOA_MAX_LEN 12
-#ifdef CONFIG_MTK_GZ_IDLE
+
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 /**
  * gzvm_vcpu_wakeup_all - notify running vcpu to wake up
  * @vcpu: Pointer to struct gzvm
@@ -37,7 +38,9 @@ static enum hrtimer_restart gzvm_vtimer_expire(struct hrtimer *hrt)
 	struct gzvm_vcpu *vcpu;
 
 	vcpu = container_of(hrt, struct gzvm_vcpu, gzvm_vtimer);
-
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
+	gzvm_vcpu_wakeup_all(vcpu->gzvm);
+#endif
 	return HRTIMER_NORESTART;
 }
 
@@ -133,10 +136,9 @@ static long gzvm_vcpu_run(struct gzvm_vcpu *vcpu, void __user *argp)
 {
 	bool need_userspace = false;
 	u64 exit_reason;
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	exit_reason = 0;
 #endif
-
 	if (copy_from_user(vcpu->run, argp, sizeof(struct gzvm_vcpu_run)))
 		return -EFAULT;
 
@@ -184,9 +186,12 @@ static long gzvm_vcpu_run(struct gzvm_vcpu *vcpu, void __user *argp)
 			fallthrough;
 		case GZVM_EXIT_GZ:
 			break;
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 		case GZVM_EXIT_IDLE:
 			gzvm_handle_guest_idle(vcpu);
+			break;
+		case GZVM_EXIT_IPI:
+			gzvm_handle_guest_ipi(vcpu);
 			break;
 #endif
 		case GZVM_EXIT_UNKNOWN:
@@ -244,7 +249,7 @@ static void gzvm_destroy_vcpu(struct gzvm_vcpu *vcpu)
 {
 	if (!vcpu)
 		return;
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	hrtimer_cancel(&vcpu->gzvm_vtimer);
 #endif
 	gzvm_arch_destroy_vcpu(vcpu->gzvm->vm_id, vcpu->vcpuid);
@@ -324,8 +329,7 @@ int gzvm_vm_ioctl_create_vcpu(struct gzvm *gzvm, u32 cpuid)
 	if (ret < 0)
 		goto free_vcpu_run;
 	gzvm->vcpus[cpuid] = vcpu;
-
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	gzvm_vtimer_init(vcpu);
 #endif
 	return ret;

@@ -172,7 +172,7 @@ gzvm_vm_ioctl_set_memory_region(struct gzvm *gzvm,
 int gzvm_irqchip_inject_irq(struct gzvm *gzvm, unsigned int vcpu_idx,
 			    u32 irq, bool level)
 {
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	gzvm_vcpu_wakeup_all(gzvm);
 #endif
 	return gzvm_arch_inject_irq(gzvm, vcpu_idx, irq, level);
@@ -559,7 +559,7 @@ static int setup_mem_alloc_mode(struct gzvm *vm)
 	return 0;
 }
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 static int enable_idle_support(struct gzvm *vm)
 {
 	int ret;
@@ -619,10 +619,9 @@ static struct gzvm *gzvm_create_vm(unsigned long vm_type)
 		pr_debug("Failed to create debugfs for VM-%u\n", gzvm->vm_id);
 
 	pr_debug("VM-%u is created\n", gzvm->vm_id);
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	enable_idle_support(gzvm);
 #endif
-
 	return gzvm;
 }
 

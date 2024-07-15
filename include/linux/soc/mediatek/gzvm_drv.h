@@ -220,7 +220,7 @@ int gzvm_vm_allocate_guest_page(struct gzvm *gzvm, struct gzvm_memslot *slot,
 int gzvm_vm_ioctl_create_vcpu(struct gzvm *gzvm, u32 cpuid);
 int gzvm_arch_vcpu_update_one_reg(struct gzvm_vcpu *vcpu, __u64 reg_id,
 				  bool is_write, __u64 *data);
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 int gzvm_arch_drv_init(void);
 #endif
 int gzvm_arch_create_vcpu(u16 vm_id, int vcpuid, void *run);
@@ -228,9 +228,8 @@ int gzvm_arch_vcpu_run(struct gzvm_vcpu *vcpu, __u64 *exit_reason);
 int gzvm_arch_destroy_vcpu(u16 vm_id, int vcpuid);
 int gzvm_arch_inform_exit(u16 vm_id);
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 u64 gzvm_vcpu_arch_get_timer_delay_ns(struct gzvm_vcpu *vcpu);
-
 void gzvm_vtimer_set(struct gzvm_vcpu *vcpu, u64 ns);
 void gzvm_vtimer_release(struct gzvm_vcpu *vcpu);
 #endif
@@ -244,8 +243,9 @@ bool gzvm_handle_guest_exception(struct gzvm_vcpu *vcpu);
 int gzvm_handle_relinquish(struct gzvm_vcpu *vcpu, phys_addr_t ipa);
 bool gzvm_handle_guest_hvc(struct gzvm_vcpu *vcpu);
 bool gzvm_arch_handle_guest_hvc(struct gzvm_vcpu *vcpu);
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 int gzvm_handle_guest_idle(struct gzvm_vcpu *vcpu);
+void gzvm_handle_guest_ipi(struct gzvm_vcpu *vcpu);
 void gzvm_vcpu_wakeup_all(struct gzvm *gzvm);
 #endif
 int gzvm_arch_create_device(u16 vm_id, struct gzvm_create_device *gzvm_dev);

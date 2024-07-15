@@ -62,7 +62,7 @@ bool gzvm_handle_guest_hvc(struct gzvm_vcpu *vcpu)
 	}
 }
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 void vcpu_block_wait(struct gzvm_vcpu *vcpu)
 {
 	struct rcuwait *wait = &vcpu->wait;
@@ -105,5 +105,10 @@ int gzvm_handle_guest_idle(struct gzvm_vcpu *vcpu)
 	}
 
 	return ret;
+}
+
+void gzvm_handle_guest_ipi(struct gzvm_vcpu *vcpu)
+{
+	gzvm_vcpu_wakeup_all(vcpu->gzvm);
 }
 #endif

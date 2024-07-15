@@ -11,7 +11,7 @@
 #include <linux/soc/mediatek/gzvm_drv.h>
 #include "gzvm_arch_common.h"
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 u64 gzvm_vcpu_arch_get_timer_delay_ns(struct gzvm_vcpu *vcpu)
 {
 	u64 ns;

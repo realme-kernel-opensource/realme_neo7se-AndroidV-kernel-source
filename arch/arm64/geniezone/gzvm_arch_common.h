@@ -104,7 +104,7 @@ struct timecycle {
 	u32 shift;
 };
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 u32 gzvm_vtimer_get_clock_mult(void);
 u32 gzvm_vtimer_get_clock_shift(void);
 #endif

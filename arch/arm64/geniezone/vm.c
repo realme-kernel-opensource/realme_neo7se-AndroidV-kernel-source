@@ -15,7 +15,7 @@
 
 #define PAR_PA47_MASK GENMASK_ULL(47, 12)
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 static struct timecycle clock_scale_factor;
 
 u32 gzvm_vtimer_get_clock_mult(void)
@@ -28,7 +28,6 @@ u32 gzvm_vtimer_get_clock_shift(void)
 	return clock_scale_factor.shift;
 }
 #endif
-
 /**
  * gzvm_hypcall_wrapper() - the wrapper for hvc calls
  * @a0: arguments passed in registers 0
@@ -95,7 +94,7 @@ int gzvm_arch_probe(void)
 	return 0;
 }
 
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 int gzvm_arch_drv_init(void)
 {
 	/* timecycle init mult shift */
@@ -416,7 +415,7 @@ int gzvm_vm_ioctl_arch_enable_cap(struct gzvm *gzvm,
 	case GZVM_CAP_BLOCK_BASED_DEMAND_PAGING:
 		ret = gzvm_vm_arch_enable_cap(gzvm, cap, &res);
 		return ret;
-#ifdef CONFIG_MTK_GZ_IDLE
+#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	case GZVM_CAP_ENABLE_IDLE:
 		ret = gzvm_vm_arch_enable_cap(gzvm, cap, &res);
 		return ret;
