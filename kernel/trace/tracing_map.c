@@ -459,6 +459,10 @@ static struct tracing_map_elt *get_free_elt(struct tracing_map *map)
 		elt = *(TRACING_MAP_ELT(map->elts, idx));
 		if (map->ops && map->ops->elt_init)
 			map->ops->elt_init(elt);
+#if IS_ENABLED(CONFIG_MTK_PANIC_ON_WARN)
+	} else {
+		atomic_set(&map->next_elt, map->max_elts + 1);
+#endif
 	}
 
 	return elt;
