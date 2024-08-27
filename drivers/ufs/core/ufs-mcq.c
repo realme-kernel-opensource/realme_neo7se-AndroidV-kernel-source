@@ -280,6 +280,38 @@ static void ufshcd_mcq_process_cqe(struct ufs_hba *hba,
 	struct cq_entry *cqe = ufshcd_mcq_cur_cqe(hwq);
 	int tag = ufshcd_mcq_get_tag(hba, hwq, cqe);
 
+#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
+	struct ufshcd_lrb *lrbp;
+	bool err_dump = false;
+
+	if ((tag >=0) && (tag < hba->nutrs)) {
+		lrbp = &hba->lrb[tag];
+
+		/* Something wrong if tag is valid but not complete */
+		if (!lrbp->cmd &&
+		    (lrbp->command_type != UTP_CMD_TYPE_DEV_MANAGE) &&
+		    (lrbp->command_type != UTP_CMD_TYPE_UFS_STORAGE))
+			err_dump = true;
+	}
+
+	if (!cqe->command_desc_base_addr || (tag >= hba->nutrs) || err_dump) {
+		/* Check if HW DMA update wrong data */
+		dev_err(hba->dev,
+			"Invalid cqe->command_desc_base_addr=0x%llx, tag=%d\n",
+			cqe->command_desc_base_addr, tag);
+
+		/* Check if DRAM is corrupt */
+		dev_err(hba->dev, "cq_head_slot:0x%x\n, cqe_base_addr:0x%llx, cqe:0x%llx, ucdl_dma_addr:0x%llx",
+			hwq->cq_head_slot,
+			(unsigned long long) hwq->cqe_base_addr,
+			(unsigned long long) cqe, hba->ucdl_dma_addr);
+
+		ufshcd_vops_dbg_register_dump(hba);
+
+		BUG_ON(1);
+	}
+#endif
+
 	if (cqe->command_desc_base_addr) {
 		ufshcd_compl_one_cqe(hba, tag, cqe);
 		/* After processed the cqe, mark it empty (invalid) entry */
