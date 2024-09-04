@@ -86,6 +86,10 @@ int gzvm_hypcall_wrapper(unsigned long a0, unsigned long a1,
  * @lr: The array of LRs(list registers).
  * @vtimer_offset: The offset maintained by hypervisor that is host cycle count
  *                 when guest VM startup.
+ * @vtimer_delay: The remaining time before the next timer tick is triggered
+ *                while the VM is running.
+ * @vtimer_migrate: Indicates whether the guest virtual timer needs to be
+ *                  migrated to the host software timer.
  *
  * - Keep the same layout of hypervisor data struct.
  * - Sync list registers back for acking virtual device interrupt status.
@@ -104,10 +108,8 @@ struct timecycle {
 	u32 shift;
 };
 
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 u32 gzvm_vtimer_get_clock_mult(void);
 u32 gzvm_vtimer_get_clock_shift(void);
-#endif
 
 static inline unsigned int
 assemble_vm_vcpu_tuple(u16 vmid, u16 vcpuid)

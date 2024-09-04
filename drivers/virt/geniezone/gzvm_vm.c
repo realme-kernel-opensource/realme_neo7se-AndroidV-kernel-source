@@ -172,9 +172,7 @@ gzvm_vm_ioctl_set_memory_region(struct gzvm *gzvm,
 int gzvm_irqchip_inject_irq(struct gzvm *gzvm, unsigned int vcpu_idx,
 			    u32 irq, bool level)
 {
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 	gzvm_vcpu_wakeup_all(gzvm);
-#endif
 	return gzvm_arch_inject_irq(gzvm, vcpu_idx, irq, level);
 }
 
@@ -210,7 +208,7 @@ static int gzvm_vm_ioctl_create_device(struct gzvm *gzvm, void __user *argp)
 
 	if (gzvm_dev->attr_addr != 0 && gzvm_dev->attr_size != 0) {
 		size_t attr_size = gzvm_dev->attr_size;
-		void __user *attr_addr = (void __user *)gzvm_dev->attr_addr;
+		void __user *attr_addr = u64_to_user_ptr(gzvm_dev->attr_addr);
 
 		/* Size of device specific data should not be over a page. */
 		if (attr_size > PAGE_SIZE)
@@ -559,7 +557,6 @@ static int setup_mem_alloc_mode(struct gzvm *vm)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 static int enable_idle_support(struct gzvm *vm)
 {
 	int ret;
@@ -571,7 +568,6 @@ static int enable_idle_support(struct gzvm *vm)
 		pr_info("Hypervisor doesn't support idle\n");
 	return ret;
 }
-#endif
 
 static struct gzvm *gzvm_create_vm(unsigned long vm_type)
 {
@@ -619,9 +615,9 @@ static struct gzvm *gzvm_create_vm(unsigned long vm_type)
 		pr_debug("Failed to create debugfs for VM-%u\n", gzvm->vm_id);
 
 	pr_debug("VM-%u is created\n", gzvm->vm_id);
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
+
 	enable_idle_support(gzvm);
-#endif
+
 	return gzvm;
 }
 

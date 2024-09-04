@@ -3,7 +3,6 @@
  * Copyright (c) 2023 MediaTek Inc.
  */
 
-#include <asm/sysreg.h>
 #include <linux/anon_inodes.h>
 #include <linux/device.h>
 #include <linux/file.h>
@@ -17,11 +16,10 @@
 /* maximum size needed for holding an integer */
 #define ITOA_MAX_LEN 12
 
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 /**
- * gzvm_vcpu_wakeup_all - notify running vcpu to wake up
- * @vcpu: Pointer to struct gzvm
- * Return:
+ * gzvm_vcpu_wakeup_all - wakes up all vCPUs associated with the specified
+ * gzvm.
+ * @gzvm: Pointer to gzvm structure.
  */
 void gzvm_vcpu_wakeup_all(struct gzvm *gzvm)
 {
@@ -38,9 +36,9 @@ static enum hrtimer_restart gzvm_vtimer_expire(struct hrtimer *hrt)
 	struct gzvm_vcpu *vcpu;
 
 	vcpu = container_of(hrt, struct gzvm_vcpu, gzvm_vtimer);
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
+
 	gzvm_vcpu_wakeup_all(vcpu->gzvm);
-#endif
+
 	return HRTIMER_NORESTART;
 }
 
@@ -60,7 +58,6 @@ void gzvm_vtimer_release(struct gzvm_vcpu *vcpu)
 {
 	hrtimer_cancel(&vcpu->gzvm_vtimer);
 }
-#endif
 
 static long gzvm_vcpu_update_one_reg(struct gzvm_vcpu *vcpu,
 				     void __user *argp,
@@ -75,7 +72,7 @@ static long gzvm_vcpu_update_one_reg(struct gzvm_vcpu *vcpu,
 	if (copy_from_user(&reg, argp, sizeof(reg)))
 		return -EFAULT;
 
-	reg_addr = (void __user *)reg.addr;
+	reg_addr = u64_to_user_ptr(reg.addr);
 	reg_size = (reg.id & GZVM_REG_SIZE_MASK) >> GZVM_REG_SIZE_SHIFT;
 	reg_size = BIT(reg_size);
 
@@ -136,9 +133,7 @@ static long gzvm_vcpu_run(struct gzvm_vcpu *vcpu, void __user *argp)
 {
 	bool need_userspace = false;
 	u64 exit_reason;
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
-	exit_reason = 0;
-#endif
+
 	if (copy_from_user(vcpu->run, argp, sizeof(struct gzvm_vcpu_run)))
 		return -EFAULT;
 
@@ -186,14 +181,12 @@ static long gzvm_vcpu_run(struct gzvm_vcpu *vcpu, void __user *argp)
 			fallthrough;
 		case GZVM_EXIT_GZ:
 			break;
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
 		case GZVM_EXIT_IDLE:
 			gzvm_handle_guest_idle(vcpu);
 			break;
 		case GZVM_EXIT_IPI:
 			gzvm_handle_guest_ipi(vcpu);
 			break;
-#endif
 		case GZVM_EXIT_UNKNOWN:
 			fallthrough;
 		default:
@@ -249,9 +242,8 @@ static void gzvm_destroy_vcpu(struct gzvm_vcpu *vcpu)
 {
 	if (!vcpu)
 		return;
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
+
 	hrtimer_cancel(&vcpu->gzvm_vtimer);
-#endif
 	gzvm_arch_destroy_vcpu(vcpu->gzvm->vm_id, vcpu->vcpuid);
 	/* clean guest's data */
 	memset(vcpu->run, 0, GZVM_VCPU_RUN_MAP_SIZE);
@@ -329,9 +321,8 @@ int gzvm_vm_ioctl_create_vcpu(struct gzvm *gzvm, u32 cpuid)
 	if (ret < 0)
 		goto free_vcpu_run;
 	gzvm->vcpus[cpuid] = vcpu;
-#if IS_ENABLED(CONFIG_MTK_GZ_IDLE)
+
 	gzvm_vtimer_init(vcpu);
-#endif
 	return ret;
 
 free_vcpu_run:
