@@ -283,6 +283,10 @@ static void ufshcd_mcq_process_cqe(struct ufs_hba *hba,
 	struct ufshcd_lrb *lrbp;
 	bool err_dump = false;
 
+	/* Error handlder in progress */
+	if (hba->eh_flags & (1 << 0))
+		goto skip_check;
+
 	if ((tag >=0) && (tag < hba->nutrs)) {
 		lrbp = &hba->lrb[tag];
 
@@ -309,6 +313,9 @@ static void ufshcd_mcq_process_cqe(struct ufs_hba *hba,
 
 		BUG_ON(1);
 	}
+
+skip_check:
+
 #endif
 
 	if (cqe->command_desc_base_addr) {
