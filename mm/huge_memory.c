@@ -3375,7 +3375,11 @@ void folio_undo_large_rmappable(struct folio *folio)
 	spin_lock_irqsave(&ds_queue->split_queue_lock, flags);
 	if (!list_empty(&folio->_deferred_list)) {
 		ds_queue->split_queue_len--;
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+		list_del_init(&folio->_deferred_list);
+#else
 		list_del(&folio->_deferred_list);
+#endif
 	}
 	spin_unlock_irqrestore(&ds_queue->split_queue_lock, flags);
 }
