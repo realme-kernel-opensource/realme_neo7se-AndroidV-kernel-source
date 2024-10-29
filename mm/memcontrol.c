@@ -7345,6 +7345,90 @@ void __mem_cgroup_uncharge_list(struct list_head *page_list)
 		uncharge_batch(&ug);
 }
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+/**
+ * mem_cgroup_replace_folio - Charge a folio's replacement.
+ * @old: Currently circulating folio.
+ * @new: Replacement folio.
+ *
+ * Charge @new as a replacement folio for @old. @old will
+ * be uncharged upon free. This is only used by the page cache
+ * (in replace_page_cache_folio()).
+ *
+ * Both folios must be locked, @new->mapping must be set up.
+ */
+void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
+{
+	struct mem_cgroup *memcg;
+	long nr_pages = folio_nr_pages(new);
+	unsigned long flags;
+
+	VM_BUG_ON_FOLIO(!folio_test_locked(old), old);
+	VM_BUG_ON_FOLIO(!folio_test_locked(new), new);
+	VM_BUG_ON_FOLIO(folio_test_anon(old) != folio_test_anon(new), new);
+	VM_BUG_ON_FOLIO(folio_nr_pages(old) != nr_pages, new);
+
+	if (mem_cgroup_disabled())
+		return;
+
+	/* Page cache replacement: new folio already charged? */
+	if (folio_memcg(new))
+		return;
+
+	memcg = folio_memcg(old);
+	VM_WARN_ON_ONCE_FOLIO(!memcg, old);
+	if (!memcg)
+		return;
+
+	/* Force-charge the new page. The old one will be freed soon */
+	if (!mem_cgroup_is_root(memcg)) {
+		page_counter_charge(&memcg->memory, nr_pages);
+		if (do_memsw_account())
+			page_counter_charge(&memcg->memsw, nr_pages);
+	}
+
+	css_get(&memcg->css);
+	commit_charge(new, memcg);
+
+	local_irq_save(flags);
+	mem_cgroup_charge_statistics(memcg, nr_pages);
+	memcg_check_events(memcg, folio_nid(new));
+	local_irq_restore(flags);
+}
+
+/**
+ * mem_cgroup_migrate - Transfer the memcg data from the old to the new folio.
+ * @old: Currently circulating folio.
+ * @new: Replacement folio.
+ *
+ * Transfer the memcg data from the old folio to the new folio for migration.
+ * The old folio's data info will be cleared. Note that the memory counters
+ * will remain unchanged throughout the process.
+ *
+ * Both folios must be locked, @new->mapping must be set up.
+ */
+void mem_cgroup_migrate(struct folio *old, struct folio *new)
+{
+	struct mem_cgroup *memcg;
+
+	VM_BUG_ON_FOLIO(!folio_test_locked(old), old);
+	VM_BUG_ON_FOLIO(!folio_test_locked(new), new);
+	VM_BUG_ON_FOLIO(folio_test_anon(old) != folio_test_anon(new), new);
+	VM_BUG_ON_FOLIO(folio_nr_pages(old) != folio_nr_pages(new), new);
+
+	if (mem_cgroup_disabled())
+		return;
+
+	memcg = folio_memcg(old);
+	VM_WARN_ON_ONCE_FOLIO(!memcg, old);
+	if (!memcg)
+		return;
+
+	/* Transfer the charge and the css ref */
+	commit_charge(new, memcg);
+	old->memcg_data = 0;
+}
+#else
 /**
  * mem_cgroup_migrate - Charge a folio's replacement.
  * @old: Currently circulating folio.
@@ -7393,6 +7477,7 @@ void mem_cgroup_migrate(struct folio *old, struct folio *new)
 	memcg_check_events(memcg, folio_nid(new));
 	local_irq_restore(flags);
 }
+#endif
 
 DEFINE_STATIC_KEY_FALSE(memcg_sockets_enabled_key);
 EXPORT_SYMBOL(memcg_sockets_enabled_key);

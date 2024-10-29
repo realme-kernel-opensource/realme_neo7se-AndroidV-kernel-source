@@ -837,7 +837,11 @@ void replace_page_cache_folio(struct folio *old, struct folio *new)
 	new->mapping = mapping;
 	new->index = offset;
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+	mem_cgroup_replace_folio(old, new);
+#else
 	mem_cgroup_migrate(old, new);
+#endif
 
 	xas_lock_irq(&xas);
 	xas_store(&xas, new);
