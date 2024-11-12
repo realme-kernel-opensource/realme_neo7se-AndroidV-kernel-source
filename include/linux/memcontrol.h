@@ -723,9 +723,7 @@ static inline void mem_cgroup_uncharge_list(struct list_head *page_list)
 	__mem_cgroup_uncharge_list(page_list);
 }
 
-#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
 void mem_cgroup_replace_folio(struct folio *old, struct folio *new);
-#endif
 
 void mem_cgroup_migrate(struct folio *old, struct folio *new);
 
@@ -1283,12 +1281,10 @@ static inline void mem_cgroup_uncharge_list(struct list_head *page_list)
 {
 }
 
-#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
 static inline void mem_cgroup_replace_folio(struct folio *old,
 		struct folio *new)
 {
 }
-#endif
 
 static inline void mem_cgroup_migrate(struct folio *old, struct folio *new)
 {
