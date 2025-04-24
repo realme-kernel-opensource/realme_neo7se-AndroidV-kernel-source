@@ -885,6 +885,30 @@ ddk_headers(
     visibility = ["//visibility:public"],
 )
 
+# oplus modules depend on ack need headers add here
+# globs() for all architectures
+filegroup(
+    name = "all_headers_allowlist_common_globs_oplus",
+    srcs = glob([
+        "kernel/**/*.h",
+        "fs/**/*.h",
+        "**/**/*.h",
+        "mm/*.h",
+    ]),
+    visibility = ["//visibility:private"],
+)
+# oplus modules depend on ack need directory add here
+linux_includes_oplus = [
+    "include",
+    "include/linux",
+    "include/trace",
+    "kernel",
+    "fs/proc",
+    "fs",
+    "mm",
+    ".",
+]
+
 # Implementation details for DDK headers. The targets below cannot be directly
 # depended on by DDK modules.
 
@@ -917,6 +941,7 @@ ddk_headers(
         "sound/usb/usbaudio.h",
         ":all_headers_allowlist_aarch64_globs",
         ":all_headers_allowlist_common_globs",
+        ":all_headers_allowlist_common_globs_oplus",
         ":xhci_headers",
     ],
     # The list of include directories where source files can #include headers
@@ -929,7 +954,7 @@ ddk_headers(
         "sound/usb",
         "include",
         "include/uapi",
-    ],
+    ] + linux_includes_oplus,
     visibility = ["//visibility:private"],
 )
 
